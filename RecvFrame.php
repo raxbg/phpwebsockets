@@ -62,7 +62,6 @@ class RecvFrame {
 	}
 
 	public function getData() {
-		//return implode('', $this->data_buffer);
 		return call_user_func_array("pack", array_merge(array('C*'), $this->data_buffer));
 	}
 }
