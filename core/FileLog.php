@@ -4,7 +4,7 @@ class FileLog implements iLog {
 
 	public function __construct($file = NULL) {
 		if (!is_string($file)) {
-			$this->logFile = dirname(__FILE__) . DIRECTORY_SEPARATOR . "webchat.log";
+			$this->logFile = DIR_WS_LOG . "webchat.log";
 		} else {
 			$this->logFile = $file;
 		}
