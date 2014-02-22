@@ -1,8 +1,7 @@
 <?php
-error_reporting(E_ERROR);
-
 class Server {
-	public $port = 65000;
+	public $ip = '';
+	public $port = 0;
 	private $sock;
 	private $errorcode;
 	private $errormsg;
@@ -13,8 +12,10 @@ class Server {
 	private $buffer = array();
 	private $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
-	public function __construct() {
+	public function __construct($ip = '127.0.0.1', $port = '65000') {
 		$this->log = new FileLog();
+		$this->ip = $ip;
+		$this->port = $port;
 	}
 
 	public function start() {
@@ -34,7 +35,7 @@ class Server {
 			return false;
 		}
 
-		$this->log->control("Server is listening on port $this->port");
+		$this->log->control("Server is listening on $this->ip:$this->port");
 
 		for (;;) {
 			$read = array_merge(array($this->sock), $this->clients, $this->unauth_clients);
