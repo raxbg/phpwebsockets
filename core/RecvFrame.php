@@ -13,7 +13,6 @@ class RecvFrame {
 
 	public function __construct($data) {
 		$bytes = unpack('C*byte', $data);
-		var_dump($bytes);
 		$this->FIN = $bytes['byte1'] & 0x80;
 		$this->RSV1 = $bytes['byte1'] & 0x40;
 		$this->RSV2 = $bytes['byte1'] & 0x20;

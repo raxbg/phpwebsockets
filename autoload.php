@@ -2,7 +2,7 @@
 function webchat_autoload($className) {
 	$incl_dirs = array(
 		'core' => DIR_WS_CORE,
-		'extensions' => DIR_WS_EXTENSIONS
+		'components' => DIR_WS_COMPONENTS
 	);
 	foreach ($incl_dirs as $dir) {
 		$filename = $dir . $className . ".php";
