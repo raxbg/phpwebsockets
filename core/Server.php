@@ -2,16 +2,16 @@
 class Server {
 	public $ip = '';
 	public $port = 0;
+	public $log;
 	private $sock;
 	private $errorcode;
 	private $errormsg;
 	private $backlog = 10;
-	private $clients = array();
+	private $connections = array();
 	private $unauth_clients = array();
-	private $log;
 	private $buffer = array();
 	private $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-	private $extensions = array();
+	private $components = array();
 
 	public function __construct($ip = '127.0.0.1', $port = '65000') {
 		$this->log = new FileLog();
@@ -19,23 +19,31 @@ class Server {
 		$this->port = $port;
 	}
 
-	public function releaseClientCallback($client) {
-		$key = array_search($client, $this->clients);
-		if ($key !== false) {
-			unset($this->clients[$key]);
+	public function loadComponent($component) {
+		$c = new $component($this);
+		if ($c instanceof iComponent && !empty($c::PROTOCOL)) {
+			if (method_exists($c, 'onLoad')) {
+				$c->onLoad();
+			}
+			$this->components[$c::PROTOCOL] = $c;
+		} else {
+			$this->log->control("Failed to load component $component. It does not implement the iComponent interface.");
 		}
+		unset($c);
 	}
 
-	public function loadComponent($ext) {
-		$e = new $ext;
-		if ($e instanceof iComponent) {
-			$e->log = $this->log;
-			$e->setReleaseClientCallback(array($this, "releaseClientCallback"));
-			$this->extensions[$e->getProtocol()] = $e;
-		} else {
-			$this->log->control("Failed to load extension $ext. It does not implement the iComponent interface.");
+	public function send($client_id, $data) {
+		if (!empty($this->connections[$client_id])) {
+			$conn = $this->connections[$client_id];
+			if (!empty($data)) {
+				$message = new SendFrame($data);
+				$msgFrame = $message->getFrame();
+				socket_write($conn->getResource(), $msgFrame);
+				return true;
+			}
+			return false;
 		}
-		unset($e);
+		return false;
 	}
 
 	public function start() {
@@ -57,8 +65,14 @@ class Server {
 
 		$this->log->control("Server is listening on $this->ip:$this->port");
 
+		foreach($this->components as $c) {
+			if (method_exists($c, 'onStart')) {
+				$c->onStart($this->ip, $this->port);
+			}
+		}
+
 		for (;;) {
-			$read = array_merge(array($this->sock), $this->clients, $this->unauth_clients);
+			$read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
 
 			if (socket_select($read, $write = NULL, $except = NULL, 0)) {
 
@@ -70,16 +84,16 @@ class Server {
 					unset($read[$key]);
 				}
 
-				foreach ($read as $read_client) {
-					$data = @socket_read($read_client, 1024, PHP_BINARY_READ);
+				foreach ($read as $read_resource) {
+					$data = @socket_read($read_resource, 1024, PHP_BINARY_READ);
 
 					if (empty($data)) {
-						$this->releaseClient($read_client);
+						$this->releaseResource($read_resource);
 					} else {
-						if (in_array($read_client, $this->unauth_clients)) {
-							$this->authClient($read_client, $data);
+						if (in_array($read_resource, $this->unauth_clients)) {
+							$this->authClient($read_resource, $data);
 						} else {
-							$this->processData($read_client, $data);
+							$this->processData($read_resource, $data);
 						}
 					}
 				}
@@ -88,51 +102,82 @@ class Server {
 		$this->stop();
 	}
 
-	private function authClient(&$client, &$data) {
+	private function getConnectionsArray() {
+		$result = array();
+		foreach ($this->connections as $con) {
+			$result[] = $con->getResource();
+		}
+		return $result;
+	}
+
+	private function getConnectionByResource(&$resource) {
+		$id = false;
+		foreach($this->connections as $conn) {
+			if ($conn->getResource() == $resource) {
+				$id = $conn->id;
+				break;
+			}
+		}
+		if ($id && !empty($this->connections[$id])) return $this->connections[$id];
+		return false;
+	}
+
+	private function authClient(&$client_resource, &$data) {
 			$headers = $this->parse_headers($data);
 			if ($this->validateWsHeaders($headers)) {
 				$protocol = $this->selectProtocol($headers);
 				if ($protocol) {
 					$response = $this->buildHandshake($headers, $protocol);
-					socket_write($client, $response);
-					$this->extensions[$protocol]->addClient($client);
-					$this->clients[] = $client;
+					socket_write($client_resource, $response);
+					$conn = new Connection($client_resource);
+					if(method_exists($this->components[$protocol], 'onConnect')) {
+						$this->components[$protocol]->onConnect($conn->id);
+					}
+					$this->connections[$conn->id] = $conn;
 				} else {
 					$this->log->control("Unsupported protocol. Disconnecting client...");
-					socket_close($client);
+					socket_close($client_resource);
 				}
 			} else {
 				$this->log->control("Header validation failed.");
-				socket_close($client);
+				socket_close($client_resource);
 			}
-			$key = array_search($client, $this->unauth_clients);
+			$key = array_search($client_resource, $this->unauth_clients);
 			unset($this->unauth_clients[$key]);
 	}
 
-	private function releaseClient(&$client) {
-			$key = array_search($client, $this->unauth_clients);
+	private function releaseResource(&$res) {
+			$key = array_search($res, $this->unauth_clients);
 			if ($key !== false) {
 				unset($this->unauth_clients[$key]);
 			} else {
-				foreach($this->extensions as &$ext) {
-					if ($ext->releaseClient($client)) {
-						break;
+				$conn = $this->getConnectionByResource($res);
+				if ($conn){
+					foreach($this->components as &$component) {
+						if(method_exists($component, 'onDisconnect')) {
+							if ($component->onDisconnect($conn->id)) {
+								break;
+							}
+						}
 					}
+					unset($this->connections[$conn->id]);
 				}
 			}
 			$this->log->control("Client has disconnected");
 	}
 
-	private function processData(&$client, &$data) {
+	private function processData(&$res, &$data) {
 		$frame = new RecvFrame($data);
 		if ($frame->opcode & 0x8) { //disconnect code
-			$this->log->control("Client wants to disconnect");
-			$this->releaseClient($client);
+			$this->releaseResource($res);
 		} else if (($frame->opcode & 0x1) && $frame->FIN) {
-			$msg = $frame->getData();
-			foreach($this->extensions as &$ext) {
-				if ($ext->onMessage($client, $msg)) {
-					break;
+			$conn = $this->getConnectionByResource($res);
+			if ($conn) {
+				$msg = $frame->getData();
+				foreach($this->components as &$component) {
+					if ($component->onMessage($conn->id, $msg)) {
+						break;
+					}
 				}
 			}
 		}
@@ -140,8 +185,13 @@ class Server {
 
 	public function stop() {
 		$this->log("Closing connections...");
-		foreach($this->extensions as &$ext) {
-			$ext->releaseClients();
+		foreach($this->components as &$component) {
+			if(method_exists($component, 'onStop')) {
+				$component->onStop();
+			}
+		}
+		foreach($this->connections as &$conn) {
+			socket_close($conn->getResource());
 		}
 		socket_close($this->sock);
 		$this->log("Server is stopped");
@@ -181,10 +231,9 @@ class Server {
 	private function selectProtocol(&$headers) {
 		if (!empty($headers['Sec-WebSocket-Protocol'])) {
 			$protocols = explode(',', $headers['Sec-WebSocket-Protocol']);
-			foreach ($this->extensions as &$ext) {
-				$protocol = $ext->selectProtocol($protocols);
-				if ($protocol) {
-					return $protocol;
+			foreach ($this->components as &$component) {
+				if (!empty($component::PROTOCOL && in_array($component::PROTOCOL, $protocols))) {
+					return $component::PROTOCOL;
 				}
 			}
 		}

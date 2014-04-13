@@ -1,40 +1,23 @@
 <?php
 class WebChat extends Component implements iComponent {
-	private $supportedProtocol = "webchat";
+	const PROTOCOL = "webchat";
 
-	public function selectProtocol(&$protocols) {
-		foreach($protocols as $protocol) {
-			if ($protocol == $this->supportedProtocol) return $protocol;
-		}
-		return false;
+	private $clients = array();
+
+	public function onConnect($client_id) {
+		$this->clients[] = $client_id;
 	}
 
-	public function getProtocol() {
-		return $this->supportedProtocol;
-	}
-
-	public function getClients() {
-		return $this->clients;
-	}
-
-	public function onMessage(&$client, &$data) {
-		$key = array_search($client, $this->clients);
+	public function onMessage($client_id, $data) {
+		$key = array_search($client_id, $this->clients);
 		if ($key === false) {
 			return false;
 		}
 
-		socket_getpeername($client, $data_ip);
-		$this->log->control("Client $data_ip says: $data");
-		if (!empty($data)) {
-			$message = new SendFrame($data);
-			$msgFrame = $message->getFrame();
-			socket_write($client, $msgFrame);
-			/*foreach ($this->clients as $client) {
-				if ($client == $this->sock || $client == $read_client) continue;
-				socket_getpeername($client, $send_to_ip);
-				$this->log->control("Sending data to client $send_to_ip");
-				socket_write($client, $msgFrame);
-			}*/
+		//$this->server->log->control("Client $client_id says: $data");
+		foreach ($this->clients as $clientId) {
+			if ($client_id == $clientId) continue;
+			$this->server->send($clientId, $data);
 		}
 		return true;
 	}
