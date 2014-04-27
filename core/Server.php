@@ -20,7 +20,7 @@ class Server {
 
 	public function loadComponent($component) {
 		$c = new $component($this);
-		if ($c instanceof iComponent && !empty($c::PROTOCOL)) {
+		if ($c instanceof iComponent) {
 			if (method_exists($c, 'onLoad')) {
 				$c->onLoad();
 			}
@@ -276,7 +276,7 @@ class Server {
 		if (!empty($headers['Sec-WebSocket-Protocol'])) {
 			$protocols = explode(',', $headers['Sec-WebSocket-Protocol']);
 			foreach ($this->components as &$component) {
-				if (!empty($component::PROTOCOL && in_array($component::PROTOCOL, $protocols))) {
+				if (in_array($component::PROTOCOL, $protocols)) {
 					return $component::PROTOCOL;
 				}
 			}
