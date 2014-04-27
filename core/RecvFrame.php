@@ -9,7 +9,20 @@ class RecvFrame {
 	public $payload_len = 0;
 	public $mask_bytes = array();
 	public $data_buffer = array();
+	public $dataFirstByteIndex = 0;
 	private $parsed_data = '';
+
+	public static function unmaskData($mask, $bytes) {
+		$x = 0;
+		$i = 0;
+		$data_buffer = array();
+		while(!empty($bytes[$i])) {
+			$data_buffer[] = ($bytes[$i] ^ $mask[$x%4]);
+			$i++;
+			$x++;
+		}
+		return call_user_func_array("pack", array_merge(array('C*'), $data_buffer));
+	}
 
 	public function __construct($data) {
 		$bytes = unpack('C*byte', $data);
@@ -52,9 +65,14 @@ class RecvFrame {
 					$i = 7;
 			}
 		}
+		$this->dataFirstByteIndex = $i;
 		$x = 0;
 		while(!empty($bytes['byte'.$i])) {
-			$this->data_buffer[] = ($bytes['byte'.$i] ^ $this->mask_bytes[$x%4]);
+			if ($this->mask) {
+				$this->data_buffer[] = ($bytes['byte'.$i] ^ $this->mask_bytes[$x%4]);
+			} else {
+				$this->data_buffer[] = $bytes['byte'.$i];
+			}
 			$i++;
 			$x++;
 		}
