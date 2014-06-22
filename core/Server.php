@@ -276,7 +276,7 @@ class Server {
 		if (!empty($headers['Sec-WebSocket-Protocol'])) {
 			$protocols = explode(',', $headers['Sec-WebSocket-Protocol']);
 			foreach ($this->components as &$component) {
-				if (!empty($component::PROTOCOL && in_array($component::PROTOCOL, $protocols))) {
+				if (!empty($component::PROTOCOL) && in_array($component::PROTOCOL, $protocols)) {
 					return $component::PROTOCOL;
 				}
 			}
