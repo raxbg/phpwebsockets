@@ -1,12 +1,16 @@
 <?php
-class FileLog implements iLog {
+class FileLog extends Log {
 	private $logFile;
 
 	public function __construct($file = NULL) {
 		if (!is_string($file)) {
-			$this->logFile = DIR_WS_LOG . "webchat.log";
+			$this->logFile = DIR_WS_LOG . "error.log";
 		} else {
-			$this->logFile = $file;
+			if ($file[0] == '/') {//absolute path
+				$this->logFile = $file;
+			} else {
+				$this->logFile = DIR_WS_LOG . $file;
+			}
 		}
 	}
 
