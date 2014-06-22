@@ -20,7 +20,7 @@ class Server {
 
 	public function loadComponent($component) {
 		$c = new $component($this);
-		if ($c instanceof iComponent && !empty($c::PROTOCOL)) {
+		if ($c instanceof Component && !empty($c::PROTOCOL)) {
 			if (method_exists($c, 'onLoad')) {
 				$c->onLoad();
 			}

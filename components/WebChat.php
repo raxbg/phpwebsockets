@@ -1,5 +1,5 @@
 <?php
-class WebChat extends Component implements iComponent {
+class WebChat extends Component {
 	const PROTOCOL = "webchat";
 
 	private $clients = array();
