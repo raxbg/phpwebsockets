@@ -12,7 +12,7 @@ class Server {
 	private $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 	private $components = array();
 
-	public function __construct($ip = '127.0.0.1', $port = '65000') {
+	public function __construct($ip = '0.0.0.0', $port = '65000') {
 		$this->log = new FileLog();
 		$this->ip = $ip;
 		$this->port = $port;
@@ -73,7 +73,9 @@ class Server {
 		for (;;) {
 			$read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
 
-			if (socket_select($read, $write = NULL, $except = NULL, 0)) {
+			$write = NULL;
+			$except = NULL;
+			if (socket_select($read, $write, $except, 0)) {
 
 				if (in_array($this->sock, $read)) { //new client is connecting
 					$this->unauth_clients[] = $new_client = socket_accept($this->sock);
@@ -118,7 +120,7 @@ class Server {
 			}
 		}
 		if ($id && !empty($this->connections[$id])) return $this->connections[$id];
-		return false;
+		return $id;
 	}
 
 	private function authClient(&$client_resource, &$data) {
@@ -175,7 +177,7 @@ class Server {
 			$this->log->control("Frame is not complete");
 			$bytesToCompleteFrame = $con->frameDataLength - $con->recvFrameDataLength();
 			if ($bytesToCompleteFrame >= 1024) {
-				$this->log->control("We continue to biffer some data");
+				$this->log->control("We continue buffering data...");
 				$con->dataBuffer .= RecvFrame::unmaskData($con->frameMask, $data);
 			} else {
 				$this->log->control("This should be the last buffer piece");
@@ -189,6 +191,7 @@ class Server {
 
 	private function processFrame(&$con, $data) {
 		$frame = new RecvFrame($data);
+		if (!$frame->isValid()) return;
 
 		if ($frame->opcode == 0) {
 			//TODO: Implement multi-frame messages

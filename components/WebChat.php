@@ -14,7 +14,7 @@ class WebChat extends Component {
 			return false;
 		}
 
-		$this->server->log->control("Client $client_id says: $data");
+		//$this->server->log->control("Client $client_id says: $data");
 		foreach ($this->clients as $clientId) {
 			if ($client_id == $clientId) continue;
 			$this->server->send($clientId, $data);

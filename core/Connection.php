@@ -13,7 +13,7 @@ class Connection {
 		$this->id = ++self::$ai_count;
 	}
 
-	public function getResource() {
+	public function &getResource() {
 		return $this->resource;
 	}
 

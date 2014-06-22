@@ -10,14 +10,16 @@ class RecvFrame {
 	public $mask_bytes = array();
 	public $data_buffer = array();
 	public $dataFirstByteIndex = 0;
+	private $is_valid_frame = true;
 	private $parsed_data = '';
 
-	public static function unmaskData($mask, $bytes) {
+	public static function unmaskData($mask, $data) {
+	    $bytes = unpack('C*byte', $data);
+		$i = 1;
 		$x = 0;
-		$i = 0;
 		$data_buffer = array();
-		while(!empty($bytes[$i])) {
-			$data_buffer[] = ($bytes[$i] ^ $mask[$x%4]);
+		while(isset($bytes['byte'.$i])) {
+			$data_buffer[] = ($bytes['byte'.$i] ^ $mask[$x%4]);
 			$i++;
 			$x++;
 		}
@@ -26,6 +28,11 @@ class RecvFrame {
 
 	public function __construct($data) {
 		$bytes = unpack('C*byte', $data);
+		if (empty($bytes)) {
+		    $this->is_valid_frame = false;
+		    return;
+		}
+		
 		$this->FIN = $bytes['byte1'] & 0x80;
 		$this->RSV1 = $bytes['byte1'] & 0x40;
 		$this->RSV2 = $bytes['byte1'] & 0x20;
@@ -33,11 +40,15 @@ class RecvFrame {
 		$this->opcode = $bytes['byte1'] & 0x0f;
 		$this->mask = $bytes['byte2'] & 0x80;
 		$this->payload_len = ($bytes['byte2'] & 0x7f);
+		
+		$payloadLenOverride = $this->payload_len;
 
 		$i = 3;
 		if ($this->mask) {
 			switch ($this->payload_len) {
 				case 126:
+				    $payloadLenOverride = $bytes['byte3'] << 8;
+				    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
 					$this->mask_bytes = array(
 						$bytes['byte5'],
 						$bytes['byte6'],
@@ -47,6 +58,12 @@ class RecvFrame {
 					$i = 9;
 					break;
 				case 127:
+				    $payloadLenOverride = $bytes['byte3'] << 8;
+				    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
+				    for ($t=5;$t<11;$t++) {
+    				    $payloadLenOverride << 8;
+    				    $payloadLenOverride = $payloadLenOverride | $bytes['byte'.$t];
+				    }
 					$this->mask_bytes = array(
 						$bytes['byte11'],
 						$bytes['byte12'],
@@ -65,9 +82,10 @@ class RecvFrame {
 					$i = 7;
 			}
 		}
+		$this->payload_len = $payloadLenOverride;
 		$this->dataFirstByteIndex = $i;
 		$x = 0;
-		while(!empty($bytes['byte'.$i])) {
+		while(isset($bytes['byte'.$i])) {
 			if ($this->mask) {
 				$this->data_buffer[] = ($bytes['byte'.$i] ^ $this->mask_bytes[$x%4]);
 			} else {
@@ -80,5 +98,9 @@ class RecvFrame {
 
 	public function getData() {
 		return call_user_func_array("pack", array_merge(array('C*'), $this->data_buffer));
+	}
+	
+	public function isValid() {
+	    return $this->is_valid_frame;
 	}
 }
