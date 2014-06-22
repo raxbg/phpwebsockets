@@ -131,10 +131,10 @@ class Server {
 					$response = $this->buildHandshake($headers, $protocol);
 					socket_write($client_resource, $response);
 					$conn = new Connection($client_resource);
+					$this->connections[$conn->id] = $conn;
 					if(method_exists($this->components[$protocol], 'onConnect')) {
 						$this->components[$protocol]->onConnect($conn->id);
 					}
-					$this->connections[$conn->id] = $conn;
 				} else {
 					$this->log->control("Unsupported protocol. Disconnecting client...");
 					socket_close($client_resource);
