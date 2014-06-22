@@ -9,19 +9,23 @@ class SendFrame {
 	public $payload_len = 0;
 	public $data = '';
 
-	public function __construct($data) {
+	public function __construct($data = '') {
 		$this->data = $data;
 	}
 
 	public function getFrame() {
-		$response = $this->FIN | $this->RSV1 | $this->RSV2 | $this->RSV3 | $this->opcode;
+		$response = $this->FIN | $this->RSV1 | $this->RSV2 | $this->RSV3;
+		$response << 8;
+		$response = $response | $this->opcode;
 
 		$data_len = strlen($this->data);
 		if ($data_len <= 125) {
 			return chr($response).chr($data_len).$this->data;
 		} else if ($data_len <= 65535) {
 			echo "Data length: $data_len\n";
-			return chr(129).chr(126).pack('n', $data_len).$this->data;
+			return chr($response).chr(126).pack('n', $data_len).$this->data;
+		} else if ($data_len > 65535) {
+		    return chr($response).chr(127).pack('NN', $data_len).$this->data;
 		}
 	}
 

@@ -37,7 +37,7 @@ class Server {
 			if (!empty($data)) {
 				$message = new SendFrame($data);
 				$msgFrame = $message->getFrame();
-				socket_write($conn->getResource(), $msgFrame);
+				$this->sendFrame($conn->getResource(), $msgFrame);
 				return true;
 			}
 			return false;
@@ -148,42 +148,50 @@ class Server {
 	}
 
 	private function releaseResource(&$res) {
-			$key = array_search($res, $this->unauth_clients);
-			if ($key !== false) {
-				unset($this->unauth_clients[$key]);
-			} else {
-				$conn = $this->getConnectionByResource($res);
-				if ($conn){
-					foreach($this->components as &$component) {
-						if(method_exists($component, 'onDisconnect')) {
-							if ($component->onDisconnect($conn->id)) {
-								break;
-							}
+		$key = array_search($res, $this->unauth_clients);
+		if ($key !== false) {
+			unset($this->unauth_clients[$key]);
+		} else {
+			$conn = $this->getConnectionByResource($res);
+			if ($conn){
+				foreach($this->components as &$component) {
+					if(method_exists($component, 'onDisconnect')) {
+						if ($component->onDisconnect($conn->id)) {
+							break;
 						}
 					}
-					unset($this->connections[$conn->id]);
 				}
+				unset($this->connections[$conn->id]);
 			}
-			$this->log->control("Client has disconnected");
+		}
+		$this->log->control("Client has disconnected");
 	}
 
 	private function processData(&$res, $data) {
-		$this->log->control("Processing data...");
+		//$this->log->control("Processing data...");
 		$con = &$this->getConnectionByResource($res);
-		if ($con->isFrameComplete()) {
-			$this->log->control("Frame is complete");
+		if ($con->wasLastFrameFinal() && $con->isFrameComplete()) {
+		    if (!empty($con->dataBuffer)) {
+			    $this->log->control("Frame is complete");
+			    $this->dispatchConnectionData($con);
+		    }
 			$this->processFrame($con, $data);
 		} else {
-			$this->log->control("Frame is not complete");
+			//$this->log->control("Frame is not complete");
 			$bytesToCompleteFrame = $con->frameDataLength - $con->recvFrameDataLength();
 			if ($bytesToCompleteFrame >= 1024) {
-				$this->log->control("We continue buffering data...");
+				//$this->log->control("We continue buffering data...");
 				$con->dataBuffer .= RecvFrame::unmaskData($con->frameMask, $data);
+				if ($con->wasLastFrameFinal() && $con->isFrameComplete()) {
+				    $this->dispatchConnectionData($con);
+				}
 			} else {
-				$this->log->control("This should be the last buffer piece");
+				//$this->log->control("This should be the last buffer piece");
 				$con->dataBuffer .= RecvFrame::unmaskData($con->frameMask, substr($data, 0, $bytesToCompleteFrame));
-				$this->log->control("The data is buffered, send it to the components");
-				$this->componentsOnMessage($con->id, $con->dataBuffer);
+				//$this->log->control("The data is buffered, send it to the components");
+				if ($con->wasLastFrameFinal()) {
+				    $this->dispatchConnectionData($con);
+				}
 				$this->processFrame($con, substr($data, $bytesToCompleteFrame));
 			}
 		}
@@ -192,42 +200,80 @@ class Server {
 	private function processFrame(&$con, $data) {
 		$frame = new RecvFrame($data);
 		if (!$frame->isValid()) return;
+		
+		if ($frame->RSV1 || $frame->RSV2 || $frame->RSV3) {
+		    $this->closeConnection($con);
+		    return;
+		}
 
 		if ($frame->opcode == 0) {
-			//TODO: Implement multi-frame messages
-			$this->log->control("Received a continuation frame");
+			$this->log->control("Continuation frame");
 		} else if ($frame->opcode == 0x1) {
-			$this->log->control('text frame');
-			if ($con->isFrameComplete()) {
-				$con->dataBuffer = $frame->getData();
-				$con->frameDataLength = $frame->payload_len;
-				$con->frameMask = $frame->mask_bytes;
-			}
+			$this->log->control('Text frame');
 		} else if ($frame->opcode == 0x2) {
 			$this->log->control('Binary frame');
-			if ($con->isFrameComplete()) {
-				$con->dataBuffer = $frame->getData();
-				$con->frameDataLength = $frame->payload_len;
-				$con->frameMask = $frame->mask_bytes;
+		}
+		
+		if ($frame->opcode < 0x8) {
+		    $con->multiFrameBuffer .= $con->dataBuffer;    
+			$con->dataBuffer = $frame->getData();
+			$con->frameDataLength = $frame->payload_len;
+			$con->lastFrameOpcode = $frame->opcode;
+			$con->is_last_frame = $frame->FIN;
+			if ($frame->mask) {
+			    $con->frameMask = $frame->mask_bytes;
+			}
+			
+			switch ($frame->opcode) {
+			    case 0x1:
+                    $con->dataType = 'text';
+                    break;
+                case 0x2:
+                    $con->dataType = 'binary';
+                    break;
 			}
 		}
+			
 		if ($frame->opcode == 0x8) { //disconnect code
 			$this->log->control('Client sent disconnect code');
-			$this->releaseResource($res);
-		} else if (($frame->opcode == 0x1) && $frame->FIN) {
+			$this->releaseResource($con->getResource());
+		} else if ($frame->FIN) {
 			if ($con->isFrameComplete()) {
-				//$msg = $frame->getData();
-				$this->componentsOnMessage($con->id, $con->dataBuffer);
+			    $this->dispatchConnectionData($con);
 			}
 		}
 	}
+	
+	private function closeConnection(&$con) {
+	    $closingFrame = new SendFrame();
+	    $closingFrame->opcode = 0x08;
+	    $this->sendFrame($con->getResource(), $closingFrame->getFrame());
+	    $this->releaseResource($con->getResource());
+	}
+	
+	private function sendFrame(&$res, $frame) {
+	    socket_write($res, $frame);
+	}
 
-	private function componentsOnMessage($conId, $msg) {
+    private function dispatchConnectionData(&$con) {
+        $con->multiFrameBuffer .= $con->dataBuffer;
+		$this->componentsOnMessage($con->id, $con->multiFrameBuffer, $con->dataType);
+		$this->resetConnectionData($con);
+    }
+
+	private function componentsOnMessage($conId, $msg, $dataType) {
 		foreach($this->components as &$component) {
-			if ($component->onMessage($conId, $msg)) {
+			if ($component->onMessage($conId, $msg, $dataType)) {
 				break;
 			}
 		}
+	}
+	
+	private function resetConnectionData(&$con) {
+	    $con->multiFrameBuffer = '';
+	    $con->dataBuffer = '';
+		$con->frameDataLength = 0;
+		$con->lastFrameOpcode = 0;
 	}
 
 	public function stop() {

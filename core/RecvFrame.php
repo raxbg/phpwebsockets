@@ -15,15 +15,18 @@ class RecvFrame {
 
 	public static function unmaskData($mask, $data) {
 	    $bytes = unpack('C*byte', $data);
-		$i = 1;
-		$x = 0;
-		$data_buffer = array();
-		while(isset($bytes['byte'.$i])) {
-			$data_buffer[] = ($bytes['byte'.$i] ^ $mask[$x%4]);
-			$i++;
-			$x++;
-		}
-		return call_user_func_array("pack", array_merge(array('C*'), $data_buffer));
+    	    if (!empty($bytes)) {
+    		$i = 1;
+    		$x = 0;
+    		$data_buffer = array();
+    		while(isset($bytes['byte'.$i])) {
+    			$data_buffer[] = ($bytes['byte'.$i] ^ $mask[$x%4]);
+    			$i++;
+    			$x++;
+    		}
+    		return call_user_func_array("pack", array_merge(array('C*'), $data_buffer));
+	    }
+	    return '';
 	}
 
 	public function __construct($data) {
@@ -44,44 +47,52 @@ class RecvFrame {
 		$payloadLenOverride = $this->payload_len;
 
 		$i = 3;
-		if ($this->mask) {
-			switch ($this->payload_len) {
-				case 126:
-				    $payloadLenOverride = $bytes['byte3'] << 8;
-				    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
-					$this->mask_bytes = array(
-						$bytes['byte5'],
-						$bytes['byte6'],
-						$bytes['byte7'],
-						$bytes['byte8']
-					);
-					$i = 9;
-					break;
-				case 127:
-				    $payloadLenOverride = $bytes['byte3'] << 8;
-				    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
-				    for ($t=5;$t<11;$t++) {
-    				    $payloadLenOverride << 8;
-    				    $payloadLenOverride = $payloadLenOverride | $bytes['byte'.$t];
-				    }
-					$this->mask_bytes = array(
-						$bytes['byte11'],
-						$bytes['byte12'],
-						$bytes['byte13'],
-						$bytes['byte14']
-					);
-					$i = 15;
-					break;
-				default:
-					$this->mask_bytes = array(
-						$bytes['byte3'],
-						$bytes['byte4'],
-						$bytes['byte5'],
-						$bytes['byte6']
-					);
-					$i = 7;
-			}
+		switch ($this->payload_len) {
+			case 126:
+			    $payloadLenOverride = $bytes['byte3'] << 8;
+			    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
+			    $i=5;
+			    if ($this->mask) {
+    				$this->mask_bytes = array(
+    					$bytes['byte5'],
+    					$bytes['byte6'],
+    					$bytes['byte7'],
+    					$bytes['byte8']
+    				);
+    				$i = 9;
+			    }
+				break;
+			case 127:
+			    $payloadLenOverride = $bytes['byte3'] << 8;
+			    $payloadLenOverride = $payloadLenOverride | $bytes['byte4'];
+			    for ($t=5;$t<11;$t++) {
+				    $payloadLenOverride << 8;
+				    $payloadLenOverride = $payloadLenOverride | $bytes['byte'.$t];
+			    }
+			    $i = 11;
+			    if ($this->mask) {
+    				$this->mask_bytes = array(
+    					$bytes['byte11'],
+    					$bytes['byte12'],
+    					$bytes['byte13'],
+    					$bytes['byte14']
+    				);
+    				$i = 15;
+			    }
+				break;
+			default:
+			    $i = 3;
+			    if ($this->mask) {
+    				$this->mask_bytes = array(
+    					$bytes['byte3'],
+    					$bytes['byte4'],
+    					$bytes['byte5'],
+    					$bytes['byte6']
+    				);
+    				$i = 7;
+			    }
 		}
+			
 		$this->payload_len = $payloadLenOverride;
 		$this->dataFirstByteIndex = $i;
 		$x = 0;
