@@ -32,7 +32,7 @@ class Server {
 	}
 
 	public function send($client_id, $data) {
-		if (!empty($this->connections[$client_id])) {
+		if (array_key_exists($client_id, $this->connections)) {
 			$conn = $this->connections[$client_id];
 			if (!empty($data)) {
 				$message = new SendFrame($data);
@@ -98,6 +98,8 @@ class Server {
 						}
 					}
 				}
+			} else {
+			    usleep(50000);
 			}
 		}
 		$this->stop();
