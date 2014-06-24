@@ -38,11 +38,14 @@ class Server {
 		unset($c);
 	}
 
-	public function send($client_id, $data) {
+	public function send($client_id, $data, $send_as_binary = false) {
 		if (array_key_exists($client_id, $this->connections)) {
 			$conn = $this->connections[$client_id];
 			if (!empty($data)) {
 				$message = new SendFrame($data);
+				if ($send_as_binary) {
+				    $message->opcode = 0x2;
+				}
 				$msgFrame = $message->getFrame();
 				$this->sendFrame($conn->getResource(), $msgFrame);
 				return true;

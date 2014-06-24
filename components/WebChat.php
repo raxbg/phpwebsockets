@@ -8,7 +8,8 @@ class WebChat extends Component {
 		$this->clients[] = $client_id;
 	}
 
-	public function onMessage($client_id, $data) {
+	public function onMessage($client_id, $data, $dataType = 'text') {
+		file_put_contents(DIR_WS_LOG.'/'.md5($data).'.dat', $data);
 		$key = array_search($client_id, $this->clients);
 		if ($key === false) {
 			return false;
@@ -17,7 +18,7 @@ class WebChat extends Component {
 		//$this->server->log->control("Client $client_id says: $data");
 		foreach ($this->clients as $clientId) {
 			if ($client_id == $clientId) continue;
-			$this->server->send($clientId, $data);
+			$this->server->send($clientId, $data, $dataType);
 		}
 		return true;
 	}
