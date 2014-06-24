@@ -11,11 +11,18 @@ class Server {
 	private $unauth_clients = array();
 	private $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 	private $components = array();
+	private $startTime = 0;
+	private $shouldStopServer = false;
 
 	public function __construct($ip = '0.0.0.0', $port = '65000') {
 		$this->log = new FileLog();
 		$this->ip = $ip;
 		$this->port = $port;
+		$this->startTime = time();
+	}
+	
+	public function getStartTime() {
+	    return $this->startTime;
 	}
 
 	public function loadComponent($component) {
@@ -46,6 +53,8 @@ class Server {
 	}
 
 	public function start() {
+		$this->shouldStopServer = false;
+		$this->startTime = time();
 		$this->sock = socket_create(AF_INET, SOCK_STREAM, 0);
 		if (!$this->sock) {
 			$this->saveSocketError();
@@ -69,8 +78,17 @@ class Server {
 				$c->onStart($this->ip, $this->port);
 			}
 		}
+		
+		stream_set_blocking(STDIN, 0);
 
 		for (;;) {
+			if ($this->shouldStopServer) break;
+			
+			$line = trim(fgets(STDIN));
+			if (!empty($line)) {
+				$this->parseCmd($line);
+			}
+			
 			$read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
 
 			$write = NULL;
@@ -80,7 +98,7 @@ class Server {
 				if (in_array($this->sock, $read)) { //new client is connecting
 					$this->unauth_clients[] = $new_client = socket_accept($this->sock);
 					socket_getpeername($new_client, $client_ip);
-					$this->log->control("Client is connecting from $client_ip");
+					$this->log->control(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
 					$key = array_search($this->sock, $read);
 					unset($read[$key]);
 				}
@@ -99,10 +117,36 @@ class Server {
 					}
 				}
 			} else {
-			    usleep(50000);
+			    usleep(20000);
 			}
 		}
-		$this->stop();
+	}
+	
+	private function printUptime() {
+		$uptime = time() - $this->startTime;
+		$hours = ($uptime > 3600) ? (int)($uptime/3600) : 0;
+		$uptime -= $hours * 3600;
+		$minutes = ($uptime > 60) ? (int)($uptime/60) : 0;
+		$uptime -= $minutes*60;
+		$seconds = $uptime;
+		$this->log->control("Current uptime is {$hours}h {$minutes}m {$seconds}s");
+	}
+	
+	private function parseCmd($cmd) {
+		switch($cmd) {
+			case 'uptime':
+				$this->printUptime();
+				break;
+			case 'stop':
+				$this->stop();
+				exit;
+			default:
+				foreach ($this->components as $component) {
+					if (method_exists($component, 'parseCmd')) {
+						$component->parseCmd($cmd);
+					}
+				}
+		}
 	}
 
 	private function getConnectionsArray() {
@@ -279,7 +323,8 @@ class Server {
 	}
 
 	public function stop() {
-		$this->log("Closing connections...");
+		$this->log->control("Closing connections...");
+		$this->shouldStopServer = true;
 		foreach($this->components as &$component) {
 			if(method_exists($component, 'onStop')) {
 				$component->onStop();
@@ -289,7 +334,7 @@ class Server {
 			socket_close($conn->getResource());
 		}
 		socket_close($this->sock);
-		$this->log("Server is stopped");
+		$this->log->control("Server is stopped");
 	}
 
 	public function getLastError() {
