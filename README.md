@@ -30,8 +30,12 @@ Every component must implement the ***onMessage()*** method. Below is a list of 
 
 `Component::onConnect($client_id);` - Called when a client is connecting to your server. This method is called only on the component which handles the protocol specified by the client that is connecting.
 
+`Component::onMessage($client_id, $msg, $data_type);` - Called when a message is received. The ***$data_type*** variable holds either the string "text" or "binary" and this specifies if the message is binary or not.
+
 `Component::onDisconnect($client_id);` - Same as onConnect() but fired when a client is disconnecting.
 
 `Component::onStop();` - Called when the server is exiting the main loop (i.e. stopping).
 
 Check out the **WebChat** component for a simple example of a component.
+
+In order to send a message from inside your component, call the ***send()*** method of the **server** object. You must specify a client id to which the message will be sent and the message itself. Example: `$this->server->send($client_id, $msg);`.
