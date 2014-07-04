@@ -10,7 +10,7 @@ Create a server instance like this `$server = new Server($ip, $port);`
 
 Load your component `$server->loadComponent('MyComponent');`. Ideally you should not modify any of the server's files. You should work entirely in your component.
 
-Call the start method of your server object `$server->start();`
+Call the start method of your server object `$server->start();`. You can use the **server.php** file as an example startup file.
 
 At this point the server will enter the main loop and will start listening for connections.
 
@@ -33,3 +33,5 @@ Every component must implement the ***onMessage()*** method. Below is a list of 
 `Component::onDisconnect($client_id);` - Same as onConnect() but fired when a client is disconnecting.
 
 `Component::onStop();` - Called when the server is exiting the main loop (i.e. stopping).
+
+Check out the **WebChat** component for a simple example of a component.
