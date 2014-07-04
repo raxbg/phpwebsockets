@@ -39,4 +39,5 @@ Every component must implement the ***onMessage()*** method. Below is a list of 
 Check out the **WebChat** component for a simple example of a component.
 
 In order to send a message from inside your component, call the ***send()*** method of the **server** object. You must specify a client id to which the message will be sent and the message itself. Example: 
+
 `$this->server->send($client_id, $msg);`.
