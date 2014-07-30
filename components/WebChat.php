@@ -1,6 +1,6 @@
 <?php
 class WebChat extends Component {
-	const PROTOCOL = "webchat";
+	public static $PROTOCOL = "webchat";
 
 	private $clients = array();
 
@@ -9,7 +9,6 @@ class WebChat extends Component {
 	}
 
 	public function onMessage($client_id, $data, $dataType = 'text') {
-		file_put_contents(DIR_WS_LOG.'/'.md5($data).'.dat', $data);
 		$key = array_search($client_id, $this->clients);
 		if ($key === false) {
 			return false;

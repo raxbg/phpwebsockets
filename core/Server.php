@@ -15,7 +15,7 @@ class Server {
 	private $shouldStopServer = false;
 
 	public function __construct($ip = '0.0.0.0', $port = '65000') {
-		$this->log = new FileLog();
+		$this->log = new FileLog(); // TODO move to config
 		$this->ip = $ip;
 		$this->port = $port;
 		$this->startTime = time();
@@ -27,11 +27,11 @@ class Server {
 
 	public function loadComponent($component) {
 		$c = new $component($this);
-		if ($c instanceof Component && !empty($c::PROTOCOL)) {
+		if ($c instanceof Component && !empty($c::$PROTOCOL)) {
 			if (method_exists($c, 'onLoad')) {
 				$c->onLoad();
 			}
-			$this->components[$c::PROTOCOL] = $c;
+			$this->components[$c::$PROTOCOL] = $c;
 		} else {
 			$this->log->control("Failed to load component $component. It does not implement the iComponent interface.");
 		}
@@ -87,11 +87,13 @@ class Server {
 		for (;;) {
 			if ($this->shouldStopServer) break;
 			
-			$line = trim(fgets(STDIN));
-			if (!empty($line)) {
-				$this->parseCmd($line);
+			if (strpos('WIN', PHP_OS) !== false){
+				$line = trim(fgets(STDIN));
+				if (!empty($line)) {
+					$this->parseCmd($line);
+				}
 			}
-			
+
 			$read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
 
 			$write = NULL;
@@ -375,8 +377,8 @@ class Server {
 		if (!empty($headers['Sec-WebSocket-Protocol'])) {
 			$protocols = explode(',', $headers['Sec-WebSocket-Protocol']);
 			foreach ($this->components as &$component) {
-				if (!empty($component::PROTOCOL) && in_array($component::PROTOCOL, $protocols)) {
-					return $component::PROTOCOL;
+				if (!empty($component::$PROTOCOL) && in_array($component::$PROTOCOL, $protocols)) {
+					return $component::$PROTOCOL;
 				}
 			}
 		}
