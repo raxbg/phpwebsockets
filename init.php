@@ -11,3 +11,4 @@ $error_level = E_ALL;
 include 'config.php';
 include 'autoload.php';
 error_reporting($error_level);
+date_default_timezone_set('UTC');

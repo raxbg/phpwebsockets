@@ -1,4 +1,9 @@
 <?hh
+enum ServerState: int {
+    STOPPED = 0;
+    RUNNING = 1;
+}
+
 class Server {
     public string $ip = '';
     public int $port = 0;
@@ -13,36 +18,40 @@ class Server {
     private $components = array();
     private int $startTime = 0;
     private bool $shouldStopServer = false;
+    private Map<string, ?Component> $hosts;
+    private ServerState $state = ServerState::STOPPED;
 
     public function __construct(string $ip = '0.0.0.0', int $port = 65000) {
         $this->log = new FileLog(); // TODO move to config
         $this->ip = $ip;
         $this->port = $port;
         $this->startTime = time();
+        $this->hosts = new Map(null);
     }
 
     public function addHost(string $host, string $component) {
+        $this->hosts[$host] = $this->loadComponent($component, $host);
     }
 
     public function isRunning() {
-        return true;
+        return $this->state == ServerState::RUNNING;
     }
 
     public function getStartTime() {
         return $this->startTime;
     }
 
-    public function loadComponent($component) {
+    public function loadComponent(string $component, string $host): ?Component {
         $c = new $component($this);
         if ($c instanceof Component && !empty($c::$PROTOCOL)) {
             if (method_exists($c, 'onLoad')) {
-                $c->onLoad();
+                $c->onLoad($this->ip, $this->port, $host);
             }
-            $this->components[$c::$PROTOCOL] = $c;
+            return $c;
         } else {
-            $this->log->control("Failed to load component $component. It does not implement the iComponent interface.");
+            $this->log->control("Failed to load component $component. It does not implement the Component interface.");
         }
-        unset($c);
+        return null;
     }
 
     public function send($client_id, $data, $send_as_binary = false) {
@@ -65,102 +74,65 @@ class Server {
     public function start() {
         $this->shouldStopServer = false;
         $this->startTime = time();
-        $this->sock = socket_create(AF_INET, SOCK_STREAM, 0);
-        if (!$this->sock) {
-            $this->saveSocketError();
-            return false;
-        }
 
-        if (!socket_bind($this->sock, $this->ip, $this->port)) {
-            $this->saveSocketError();
-            return false;
-        }
+        $context = stream_context_create(array(
+            'socket' => array(
+                'backlog' => $this->backlog
+            )
+        ));
 
-        if (!socket_listen($this->sock, $this->backlog)) {
+        $this->sock = stream_socket_server('tcp://' . $this->ip . ':' . $this->port, $this->errorcode, $this->errormsg, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
+        if ($this->sock === false) {
             $this->saveSocketError();
             return false;
         }
 
         $this->log->control("Server is listening on $this->ip:$this->port");
 
-        foreach($this->components as $c) {
-            if (method_exists($c, 'onStart')) {
-                $c->onStart($this->ip, $this->port);
+        $this->state = ServerState::RUNNING;
+    }
+
+    public function loop() {
+        if ($this->shouldStopServer) return;
+
+        $read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
+
+        $write = NULL;
+        $except = NULL;
+        if (stream_select($read, $write, $except, 0)) {
+
+            if (in_array($this->sock, $read)) { //new client is connecting
+                $this->unauth_clients[] = $new_client = stream_socket_accept($this->sock);
+                $client_ip = stream_socket_get_name($new_client, true);
+                $this->log->control(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
+                $key = array_search($this->sock, $read);
+                unset($read[$key]);
             }
-        }
 
-        stream_set_blocking(STDIN, 0);
+            foreach ($read as $read_resource) {
+                $data = fread($read_resource, 1024);
 
-        for (;;) {
-            if ($this->shouldStopServer) break;
-
-            if (strpos('WIN', PHP_OS) !== false){
-                $line = trim(fgets(STDIN));
-                if (!empty($line)) {
-                    $this->parseCmd($line);
-                }
-            }
-
-            $read = array_merge(array($this->sock), $this->getConnectionsArray(), $this->unauth_clients);
-
-            $write = NULL;
-            $except = NULL;
-            if (socket_select($read, $write, $except, 0)) {
-
-                if (in_array($this->sock, $read)) { //new client is connecting
-                    $this->unauth_clients[] = $new_client = socket_accept($this->sock);
-                    $client_ip = '';
-                    socket_getpeername($new_client, $client_ip);
-                    $this->log->control(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
-                    $key = array_search($this->sock, $read);
-                    unset($read[$key]);
-                }
-
-                foreach ($read as $read_resource) {
-                    $data = @socket_read($read_resource, 1024, PHP_BINARY_READ);
-
-                    if (empty($data)) {
-                        $this->releaseResource($read_resource);
+                if (empty($data)) {
+                    $this->releaseResource($read_resource);
+                } else {
+                    if (in_array($read_resource, $this->unauth_clients)) {
+                        $this->authClient($read_resource, $data);
                     } else {
-                        if (in_array($read_resource, $this->unauth_clients)) {
-                            $this->authClient($read_resource, $data);
-                        } else {
-                            $this->processData($read_resource, $data);
-                        }
+                        $this->processData($read_resource, $data);
                     }
                 }
-            } else {
-                usleep(20000);
             }
         }
     }
 
-    private function printUptime() {
+    public function printUptime() {
         $uptime = time() - $this->startTime;
         $hours = ($uptime > 3600) ? (int)($uptime/3600) : 0;
         $uptime -= $hours * 3600;
         $minutes = ($uptime > 60) ? (int)($uptime/60) : 0;
         $uptime -= $minutes*60;
         $seconds = $uptime;
-        $this->log->control("Current uptime is {$hours}h {$minutes}m {$seconds}s");
-    }
-
-    private function parseCmd($cmd) {
-        switch($cmd) {
-        case 'uptime':
-            $this->printUptime();
-            break;
-        case 'stop':
-            $this->stop();
-            exit;
-            break;
-        default:
-            foreach ($this->components as $component) {
-                if (method_exists($component, 'parseCmd')) {
-                    $component->parseCmd($cmd);
-                }
-            }
-        }
+        $this->log->control(sprintf("[%s:%d] Current uptime is %sh %sm %ss", $this->ip, $this->port, $hours, $minutes, $seconds));
     }
 
     private function getConnectionsArray() {
@@ -189,19 +161,19 @@ class Server {
             $protocol = $this->selectProtocol($headers);
             if ($protocol) {
                 $response = $this->buildHandshake($headers, $protocol);
-                socket_write($client_resource, $response);
+                fwrite($client_resource, $response);
                 $conn = new Connection($client_resource);
                 $this->connections[$conn->id] = $conn;
-                if(method_exists($this->components[$protocol], 'onConnect')) {
+                if(method_exists($this->hosts[$protocol], 'onConnect')) {
                     $this->components[$protocol]->onConnect($conn->id);
                 }
             } else {
                 $this->log->control("Unsupported protocol. Disconnecting client...");
-                socket_close($client_resource);
+                fclose($client_resource);
             }
         } else {
             $this->log->control("Header validation failed.");
-            socket_close($client_resource);
+            fclose($client_resource);
         }
         $key = array_search($client_resource, $this->unauth_clients);
         unset($this->unauth_clients[$key]);
@@ -214,8 +186,8 @@ class Server {
         } else {
             $conn = $this->getConnectionByResource($res);
             if ($conn){
-                foreach($this->components as &$component) {
-                    if(method_exists($component, 'onDisconnect')) {
+                foreach($this->hosts as $component) {
+                    if ($component !== null) {
                         if ($component->onDisconnect($conn->id)) {
                             break;
                         }
@@ -224,6 +196,7 @@ class Server {
                 unset($this->connections[$conn->id]);
             }
         }
+        fclose($res);
         $this->log->control("Client has disconnected");
     }
 
@@ -312,7 +285,7 @@ class Server {
     }
 
     private function sendFrame(&$res, $frame) {
-        socket_write($res, $frame);
+        fwrite($res, $frame);
     }
 
     private function dispatchConnectionData(&$con) {
@@ -345,9 +318,9 @@ class Server {
             }
         }
         foreach($this->connections as &$conn) {
-            socket_close($conn->getResource());
+            fclose($conn->getResource());
         }
-        socket_close($this->sock);
+        fclose($this->sock);
         $this->log->control("Server is stopped");
     }
 
@@ -356,8 +329,6 @@ class Server {
     }
 
     private function saveSocketError() {
-        $this->errorcode = socket_last_error();
-        $this->errormsg = socket_strerror($this->errorcode);
         $this->log->error(date('[j M Y : H:i:s]')." ($this->errorcode) $this->errormsg");
     }
 

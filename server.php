@@ -13,3 +13,5 @@ foreach ($hosts as $host => $config) {
         }
     }
 }
+
+$server_manager->run();
