@@ -1,7 +1,14 @@
 <?hh
-$domains = Map {
+$hosts = Map {
     'localhost' => Map {
-        'port' => '65000',
-        'components' => Vector {'WebChat'}
+        'ports' => Map {
+            65000 => 'Echo',
+            65001 => 'WebChat'
+        }
+    },
+    '*.ivo.com' => Map {
+        'ports' => Map {
+            65000 => 'Echo'
+        }
     }
-}
+};

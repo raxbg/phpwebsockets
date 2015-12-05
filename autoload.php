@@ -2,6 +2,7 @@
 function system_autoload($className) {
     $incl_dirs = array(
         'core' => DIR_WS_CORE,
+        'core_server' => DIR_WS_CORE_SERVER,
         'components' => DIR_WS_COMPONENTS
     );
 

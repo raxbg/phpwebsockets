@@ -21,6 +21,13 @@ class Server {
         $this->startTime = time();
     }
 
+    public function addHost(string $host, string $component) {
+    }
+
+    public function isRunning() {
+        return true;
+    }
+
     public function getStartTime() {
         return $this->startTime;
     }
