@@ -1,24 +1,13 @@
 <?hh
 abstract class Wrapper {
     protected Map $config;
-    protected ?Server $server = null;
+    protected Server $server;
+    protected Log $log;
 
-    public function __construct(Map $config) {
+    public function __construct(Map $config, Server $server) {
         $this->config = $config;
-    }
-
-    public function setServer(Server $server) {
         $this->server = $server;
-    }
-
-    protected function log(string $msg = '', bool $debug = false):void {
-        if ($this->server !== null) {
-            if ($debug) {
-                $this->server->log->control($msg);
-            } else {
-                $this->server->log->error($msg);
-            }
-        }
+        $this->log = $this->server->log;
     }
 
     protected function disconnect(Connection $con) {

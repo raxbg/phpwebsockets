@@ -8,23 +8,27 @@ class Server {
     private $sock;
     private int $errorcode = 0;
     private string $errormsg = '';
-    private int $backlog = 10;
+    private int $backlog = 100;
     private Map<int, Connection> $connections = Map {};
     private int $startTime = 0;
-    private bool $shouldStopServer = false;
     private ServerState $state = ServerState::STOPPED;
-    private Wrapper $wrapper;
+    private ?Wrapper $wrapper;
 
     public string $ip = '';
     public int $port = 0;
     public $log;
 
-    public function __construct(string $ip = '0.0.0.0', int $port = 65000, string $wrapper = 'Raw', Map $wrapper_config = Map {}) {
-        $this->log = new FileLog(); // TODO move to config
+    public function __construct(string $ip = '0.0.0.0', int $port = 65000) {
+        $this->log = new FileLog();
         $this->ip = $ip;
         $this->port = $port;
         $this->startTime = time();
-        $this->wrapper = new $wrapper($wrapper_config);
+    }
+
+    public function loadWrapper(string $wrapper = 'RawTcp', Map $wrapper_config = Map {}): Server {
+        $this->wrapper = new $wrapper($wrapper_config, $this);
+        $this->wrapper->init();
+        return $this;
     }
 
     public function isRunning() {
@@ -35,11 +39,7 @@ class Server {
         return $this->startTime;
     }
 
-    public function start() {
-        $this->wrapper->setServer($this);
-        $this->wrapper->init();
-
-        $this->shouldStopServer = false;
+    public function start(): Server {
         $this->startTime = time();
 
         $context = stream_context_create(array(
@@ -51,16 +51,18 @@ class Server {
         $this->sock = stream_socket_server('tcp://' . $this->ip . ':' . $this->port, $this->errorcode, $this->errormsg, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
         if ($this->sock === false) {
             $this->saveSocketError();
-            return false;
+            return $this;
         }
 
-        $this->log->control("Server is listening on $this->ip:$this->port");
+        $this->log->debug("Server is listening on $this->ip:$this->port");
 
         $this->state = ServerState::RUNNING;
+
+        return $this;
     }
 
-    public function loop() {
-        if ($this->shouldStopServer) return;
+    public function loop(): void {
+        if ($this->state !== ServerState::RUNNING) return;
 
         $read = array_merge(array($this->sock), $this->getConnectionsArray());
 
@@ -70,15 +72,20 @@ class Server {
 
             if (in_array($this->sock, $read)) { //new client is connecting
                 $new_client = stream_socket_accept($this->sock);
-                $client_ip = stream_socket_get_name($new_client, true);
-                $key = array_search($this->sock, $read);
-                unset($read[$key]);
+                if ($new_client) {
+                    $client_ip = stream_socket_get_name($new_client, true);
+                    $key = array_search($this->sock, $read);
+                    unset($read[$key]);
 
-                $this->log->control(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
+                    //$this->log->debug(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
 
-                $c = new Connection($new_client, $client_ip);
-                $this->connections[$c->id] = $c;
-                $this->wrapper->onConnect($c);
+                    $c = new Connection($new_client, $client_ip);
+                    $this->connections[$c->id] = $c;
+
+                    if ($this->wrapper !== null) {
+                        $this->wrapper->onConnect($c);
+                    }
+                }
             }
 
             foreach ($read as $read_resource) {
@@ -89,7 +96,9 @@ class Server {
                     if (empty($data)) {
                         $this->disconnect($con);
                     } else {
-                        $this->wrapper->onData($con, $data);
+                        if ($this->wrapper !== null) {
+                            $this->wrapper->onData($con, $data);
+                        }
                     }
                 }
             }
@@ -103,28 +112,42 @@ class Server {
         $minutes = ($uptime > 60) ? (int)($uptime/60) : 0;
         $uptime -= $minutes*60;
         $seconds = $uptime;
-        $this->log->control(sprintf("[%s:%d] Current uptime is %sh %sm %ss", $this->ip, $this->port, $hours, $minutes, $seconds));
+        $this->log->debug(sprintf("[%s:%d] Current uptime is %sh %sm %ss", $this->ip, $this->port, $hours, $minutes, $seconds));
+    }
+
+    public function printStatus() {
+        $this->log->debug(sprintf("Currently active connections: %d", $this->connections->count()));
     }
 
     public function disconnect(Connection $con) {
         if ($con !== null){
-            $this->wrapper->onDisconnect($con);
-            fclose($con->getResource());
+            if ($this->wrapper !== null) {
+                $this->wrapper->onDisconnect($con);
+            }
+            $con->close();
             unset($this->connections[$con->id]);
         }
 
-        $this->log->control("Client has disconnected");
+        //$this->log->debug("Client has disconnected");
     }
 
-    public function stop() {
-        $this->log->control("Closing connections...");
-        $this->wrapper->onStop();
-        $this->shouldStopServer = true;
+    public function stop(): void {
+        if (!$this->isRunning()) return;
+
+        $this->log->debug("Closing connections...");
+
+        if ($this->wrapper !== null) {
+            $this->wrapper->onStop();
+        }
+
         foreach($this->connections as $con) {
             $con->close();
+        
         }
         fclose($this->sock);
-        $this->log->control("Server is stopped");
+        $this->state = ServerState::STOPPED;
+
+        $this->log->debug("Server is stopped");
     }
 
     private function getConnectionsArray() {

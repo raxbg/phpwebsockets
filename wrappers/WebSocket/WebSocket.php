@@ -26,7 +26,7 @@ class WebSocket extends Wrapper {
             $this->components[$c::$PROTOCOL] = $c;
             return $c;
         } else {
-            $this->log("Failed to load component $component. It does not implement the Component interface.", true);
+            $this->log->error("Failed to load component $component. It does not implement the Component interface.");
         }
         return null;
     }
@@ -158,11 +158,11 @@ class WebSocket extends Wrapper {
                 $con->setAuthorized(true);
                 $this->components[$protocol]->onConnect($con);
             } else {
-                $this->log("Unsupported protocol. Disconnecting client...", true);
+                $this->log->debug("Unsupported protocol. Disconnecting client...");
                 $this->local_disconnect($con);
             }
         } else {
-            $this->log("Header validation failed.", true);
+            $this->log->debug("Header validation failed.");
             $this->disconnect($con->getConnection());
         }
     }
@@ -170,7 +170,7 @@ class WebSocket extends Wrapper {
     private function processData(WebSockConnection $con, $data) {
         if ($con->wasLastFrameFinal() && $con->isFrameComplete()) {
             if (!empty($con->dataBuffer)) {
-                $this->log("Frame is complete", true);
+                //$this->log->debug("Frame is complete");
                 $this->dispatchConnectionData($con);
             }
             $this->processFrame($con, $data);
@@ -201,11 +201,11 @@ class WebSocket extends Wrapper {
         }
 
         if ($frame->opcode == 0) {
-            $this->log("Continuation frame", true);
+            //$this->log->debug("Continuation frame");
         } else if ($frame->opcode == 0x1) {
-            $this->log('Text frame', true);
+            //$this->log->debug('Text frame');
         } else if ($frame->opcode == 0x2) {
-            $this->log('Binary frame', true);
+            //$this->log->debug('Binary frame');
         }
 
         if ($frame->opcode < 0x8) {
@@ -229,7 +229,7 @@ class WebSocket extends Wrapper {
         }
 
         if ($frame->opcode == 0x8) { //disconnect code
-            $this->log('Client sent disconnect code', true);
+            //$this->log->debug('Client sent disconnect code');
         } else if ($frame->FIN) {
             if ($con->isFrameComplete()) {
                 $this->dispatchConnectionData($con);

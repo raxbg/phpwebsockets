@@ -14,14 +14,12 @@ class FileLog extends Log {
         }
     }
 
-    public function control(string $message): void {
+    public function debug(string $message): void {
         echo trim($message)."\n";
     }
 
     public function error(string $message): void {
         file_put_contents($this->logFile, trim($message)."\n", FILE_APPEND);
-    }
-
-    public function history(HistoryLog $data): void {
+        if (DEBUG_MODE) $this->debug($message);
     }
 }

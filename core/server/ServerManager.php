@@ -8,14 +8,8 @@ class ServerManager {
 
     public function startServer(int $port, string $wrapper, Map $wrapper_config) {
         if (!$this->servers->contains($port)) {
-            $this->servers[$port] = new Server('0.0.0.0', $port, $wrapper, $wrapper_config);
-        }
-
-        $server = $this->servers->get($port);
-        if ($server !== null) {
-            if (!$server->isRunning()) {
-                $server->start();
-            }
+            $this->servers[$port] = new Server('0.0.0.0', $port);
+            $this->servers[$port]->loadWrapper($wrapper, $wrapper_config)->start();
         }
     }
 
@@ -31,7 +25,9 @@ class ServerManager {
             }
 
             foreach ($this->servers as $server) {
-                $server->loop();
+                if ($server->isRunning()) {
+                    $server->loop();
+                }
             }
 
             usleep(20000);
@@ -39,21 +35,27 @@ class ServerManager {
     }
 
     private function parseCmd($cmd) {
+        if ($cmd == 'quit') {
+            foreach ($this->servers as $server) {
+                $server->stop();
+            }
+            exit;
+        }
+
         foreach ($this->servers as $server) {
             switch($cmd) {
             case 'uptime':
                 $server->printUptime();
                 break;
+            case 'status':
+                $server->printStatus();
+                break;
             case 'stop':
                 $server->stop();
-                exit;
                 break;
-            default:
-                //foreach ($this->hosts as $component) {
-                //    if (method_exists($component, 'parseCmd')) {
-                //        $component->parseCmd($cmd);
-                //    }
-                //}
+            case 'start':
+                $server->start();
+                break;
             }
         }
     }

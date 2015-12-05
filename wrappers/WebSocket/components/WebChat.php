@@ -5,7 +5,7 @@ class WebChat extends Component {
     private Vector<WebSockConnection> $clients = Vector {};
 
     public function onLoad(string $ip, int $port, string $host) {
-        $this->server->log->control("WebChat component loaded on $ip:$port for host $host");
+        $this->server->log->debug("WebChat component loaded on $ip:$port for host $host");
     }
 
     public function onConnect(WebSockConnection $con): void {

@@ -3,7 +3,7 @@ class SimpleEcho extends Component {
     public static string $PROTOCOL = "echo";
 
     public function onLoad(string $ip, int $port, string $host) {
-        $this->server->log->control("SimpleEcho component loaded on $ip:$port for host $host");
+        $this->server->log->debug("SimpleEcho component loaded on $ip:$port for host $host");
     }
 
     public function onMessage(WebSockConnection $con, string $data, string $dataType = 'text'): void {
