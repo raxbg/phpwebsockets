@@ -6,8 +6,7 @@ class SimpleEcho extends Component {
         $this->server->log->control("SimpleEcho component loaded on $ip:$port for host $host");
     }
 
-    public function onMessage(int $client_id, string $data, string $dataType = 'text'): bool {
-        $this->server->send($client_id, $data, $dataType);
-        return true;
+    public function onMessage(WebSockConnection $con, string $data, string $dataType = 'text'): void {
+        $con->send($data, ($dataType == 'binary' ? true : false));
     }
 }

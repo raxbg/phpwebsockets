@@ -6,9 +6,9 @@ class ServerManager {
         $this->servers = new Map(null);
     }
 
-    public function startServer(string $host, int $port, string $component) {
+    public function startServer(int $port, string $wrapper, Map $wrapper_config) {
         if (!$this->servers->contains($port)) {
-            $this->servers[$port] = new Server('0.0.0.0', $port);
+            $this->servers[$port] = new Server('0.0.0.0', $port, $wrapper, $wrapper_config);
         }
 
         $server = $this->servers->get($port);
@@ -16,7 +16,6 @@ class ServerManager {
             if (!$server->isRunning()) {
                 $server->start();
             }
-            $server->addHost($host, $component);
         }
     }
 

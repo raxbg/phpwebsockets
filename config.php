@@ -1,14 +1,14 @@
 <?hh
-$hosts = Map {
-    'localhost' => Map {
-        'ports' => Map {
-            65000 => 'SimpleEcho',
-            65001 => 'WebChat'
+$server_config = Map {
+    65000 => Map {
+        'WebSocket' => Map {
+            'hosts' => Map {
+                'localhost' => Vector {'WebChat', 'SimpleEcho'},
+                '*.ivo.com' => Vector {'SimpleEcho'}
+            }
         }
     },
-    '*.ivo.com' => Map {
-        'ports' => Map {
-            65000 => 'SimpleEcho'
-        }
+    65001 => Map {
+        'RawTcp' => Map {}
     }
 };

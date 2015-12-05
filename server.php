@@ -6,10 +6,14 @@ include 'init.php';
 
 $server_manager = new ServerManager();
 
-foreach ($hosts as $host => $config) {
-    if ($config->contains('ports')) {
-        foreach ($config->get('ports') as $port => $component) {
-            $server_manager->startServer($host, $port, $component);
+foreach ($server_config as $port => $config) {
+    $wrapper = $config->firstKey();
+
+    if ($wrapper !== null) {
+        $wrapper_config = $config->get($wrapper);
+
+        if ($wrapper_config !== null) {
+            $server_manager->startServer($port, $wrapper, $wrapper_config);
         }
     }
 }
