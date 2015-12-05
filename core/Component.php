@@ -1,10 +1,9 @@
-<?php
+<?hh
 abstract class Component {
-	protected $server;
 
-	public function __construct($server) {
-		$this->server = $server;
-	}
+	public function __construct(
+        protected Server $server
+    ){}
 	
-	abstract public function onMessage($client, $data);
+	abstract public function onMessage(int $client_id, string $data, string $dataType): bool;
 }

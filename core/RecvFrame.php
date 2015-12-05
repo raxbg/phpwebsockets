@@ -1,21 +1,21 @@
-<?php
+<?hh
 class RecvFrame {
-	public $FIN = false;
-	public $RSV1 = false;
-	public $RSV2 = false;
-	public $RSV3 = false;
-	public $opcode = 0;
-	public $mask = false;
-	public $payload_len = 0;
+	public bool $FIN = false;
+	public bool $RSV1 = false;
+	public bool $RSV2 = false;
+	public bool $RSV3 = false;
+	public int $opcode = 0;
+	public bool $mask = false;
+	public int $payload_len = 0;
 	public $mask_bytes = array();
 	public $data_buffer = array();
-	public $dataFirstByteIndex = 0;
-	private $is_valid_frame = true;
-	private $parsed_data = '';
+	public int $dataFirstByteIndex = 0;
+	private bool $is_valid_frame = true;
+	private string $parsed_data = '';
 
-	public static function unmaskData($mask, $data) {
+	public static function unmaskData($mask, $data): string {
 	    $bytes = unpack('C*byte', $data);
-    	    if (!empty($bytes)) {
+        if (!empty($bytes)) {
     		$i = 1;
     		$x = 0;
     		$data_buffer = array();
@@ -36,12 +36,12 @@ class RecvFrame {
 		    return;
 		}
 		
-		$this->FIN = $bytes['byte1'] & 0x80;
-		$this->RSV1 = $bytes['byte1'] & 0x40;
-		$this->RSV2 = $bytes['byte1'] & 0x20;
-		$this->RSV3 = $bytes['byte1'] & 0x10;
+		$this->FIN = (bool)($bytes['byte1'] & 0x80);
+		$this->RSV1 = (bool)($bytes['byte1'] & 0x40);
+		$this->RSV2 = (bool)($bytes['byte1'] & 0x20);
+		$this->RSV3 = (bool)($bytes['byte1'] & 0x10);
 		$this->opcode = $bytes['byte1'] & 0x0f;
-		$this->mask = $bytes['byte2'] & 0x80;
+		$this->mask = (bool)($bytes['byte2'] & 0x80);
 		$this->payload_len = ($bytes['byte2'] & 0x7f);
 		
 		$payloadLenOverride = $this->payload_len;
@@ -107,11 +107,11 @@ class RecvFrame {
 		}
 	}
 
-	public function getData() {
+	public function getData(): string {
 		return call_user_func_array("pack", array_merge(array('C*'), $this->data_buffer));
 	}
 	
-	public function isValid() {
+	public function isValid(): bool {
 	    return $this->is_valid_frame;
 	}
 }

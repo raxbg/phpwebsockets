@@ -1,14 +1,14 @@
-<?php
+<?hh
 class WebChat extends Component {
-	public static $PROTOCOL = "webchat";
+	public static string $PROTOCOL = "webchat";
 
-	private $clients = array();
+	private $clients = Vector{};
 
-	public function onConnect($client_id) {
+	public function onConnect(int $client_id): void {
 		$this->clients[] = $client_id;
 	}
 
-	public function onMessage($client_id, $data, $dataType = 'text') {
+	public function onMessage(int $client_id, string $data, string $dataType = 'text'): bool {
 		$key = array_search($client_id, $this->clients);
 		if ($key === false) {
 			return false;

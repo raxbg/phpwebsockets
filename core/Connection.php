@@ -1,14 +1,14 @@
-<?php
+<?hh
 class Connection {
-	public static $ai_count = 0;
-	public $id;
-	public $frameDataLength = 0;
-	public $multiFrameBuffer = '';
+	public static int $ai_count = 0;
+	public int $id;
+	public int $frameDataLength = 0;
+	public string $multiFrameBuffer = '';
 	public $frameMask = array();
-	public $dataBuffer = '';
-	public $dataType = '';
-	public $lastFrameOpcode = 0;
-	public $is_last_frame = true;
+	public string $dataBuffer = '';
+	public string $dataType = '';
+	public int $lastFrameOpcode = 0;
+	public bool $is_last_frame = true;
 
 	protected $resource;
 
@@ -21,17 +21,17 @@ class Connection {
 		return $this->resource;
 	}
 
-	public function recvFrameDataLength() {
+	public function recvFrameDataLength(): int {
 		return strlen($this->dataBuffer);
 	}
 
-	public function isFrameComplete() {
+	public function isFrameComplete(): bool {
 		//echo "frameDataLength: ".$this->frameDataLength."\n";
 		//echo "recvFrameDataLength(): ".$this->recvFrameDataLength()."\n";
 		return $this->frameDataLength == $this->recvFrameDataLength();
 	}
 	
-	public function wasLastFrameFinal() {
+	public function wasLastFrameFinal(): bool {
 	    return $this->is_last_frame;
 	}
 }
