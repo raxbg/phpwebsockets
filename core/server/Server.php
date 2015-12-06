@@ -90,60 +90,44 @@ class Server {
         return $this;
     }
 
-    public function loop(): void {
+    public async function loop(): Awaitable<void> {
         if ($this->state !== ServerState::RUNNING) return;
 
-        $read = array_merge(array($this->sock), $this->getConnectionsArray());
+        $code = await stream_await($this->sock, STREAM_AWAIT_READ, 0.001);
 
-        $write = NULL;
-        $except = NULL;
-        if (stream_select($read, $write, $except, 0)) {
+        while ($code == STREAM_AWAIT_READY) {
+            $new_client = stream_socket_accept($this->sock);
+            if ($new_client) {
+                $client_ip = stream_socket_get_name($new_client, true);
+                $con = new Connection($new_client, $this->wrapper, $client_ip);
+                if ($this->wrapper !== null) {
+                    $this->wrapper->onConnect($con);
+                }
 
-            if (in_array($this->sock, $read)) { //new client is connecting
-                $new_client = stream_socket_accept($this->sock);
-                if ($new_client) {
-                    $client_ip = stream_socket_get_name($new_client, true);
-                    $c = new Connection($new_client, $client_ip);
-
-                    if ($this->isSSL()) {
-                        if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv3_SERVER)) {
-                            if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv23_SERVER)) {
-                                if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv2_SERVER)) {
-                                    $this->log->error('Unable to create secure socket');
-                                    $c->close();
-                                    return;
-                                }
+                if ($this->isSSL()) {
+                    if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv3_SERVER)) {
+                        if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv23_SERVER)) {
+                            if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv2_SERVER)) {
+                                $this->log->error('Unable to create secure socket');
+                                $con->close();
+                                return;
                             }
                         }
                     }
-                    $key = array_search($this->sock, $read);
-                    unset($read[$key]);
-
-                    //$this->log->debug(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
-
-                    $this->connections[$c->id] = $c;
-
-                    if ($this->wrapper !== null) {
-                        $this->wrapper->onConnect($c);
-                    }
                 }
+
+                $this->connections[$con->id] = $con;
+                $this->log->debug(date('[Y-m-d H:i:s]') . " Client connected from $client_ip");
             }
 
-            foreach ($read as $read_resource) {
-                $data = fread($read_resource, 1024);
-
-                $con = $this->getConnectionByResource($read_resource);
-                if ($con !== null) {
-                    if (empty($data)) {
-                        $this->disconnect($con);
-                    } else {
-                        if ($this->wrapper !== null) {
-                            $this->wrapper->onData($con, $data);
-                        }
-                    }
-                }
-            }
+            $code = await stream_await($this->sock, STREAM_AWAIT_READ, 0.001);
         }
+
+        $awaitables = Vector {};
+        foreach ($this->connections as $con) {
+            $awaitables->add($con->listen()->getWaitHandle());
+        }
+        await AwaitAllWaitHandle::fromVector($awaitables);
     }
 
     public function printUptime() {
@@ -169,7 +153,7 @@ class Server {
             unset($this->connections[$con->id]);
         }
 
-        //$this->log->debug("Client has disconnected");
+        $this->log->debug("Client has disconnected");
     }
 
     public function stop(): void {
@@ -189,23 +173,6 @@ class Server {
         $this->state = ServerState::STOPPED;
 
         $this->log->debug("Server is stopped");
-    }
-
-    private function getConnectionsArray() {
-        $result = array();
-        foreach ($this->connections as $con) {
-            $result[] = $con->getResource();
-        }
-        return $result;
-    }
-
-    private function getConnectionByResource($resource): ?Connection {
-        foreach($this->connections as $con) {
-            if ($con->getResource() == $resource) {
-                return $con;
-            }
-        }
-        return null;
     }
 
     private function saveSocketError() {

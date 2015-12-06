@@ -24,13 +24,14 @@ class ServerManager {
                 }
             }
 
+            $awaitables = Vector {};
             foreach ($this->servers as $server) {
                 if ($server->isRunning()) {
-                    $server->loop();
+                    $awaitables->add($server->loop()->getWaitHandle());
                 }
             }
-
-            usleep(20000);
+            AwaitAllWaitHandle::fromVector($awaitables)->getWaitHandle()->join();
+            SleepWaitHandle::create(20000)->join();
         }
     }
 
