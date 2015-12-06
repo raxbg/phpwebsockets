@@ -13,22 +13,43 @@ class Server {
     private int $startTime = 0;
     private ServerState $state = ServerState::STOPPED;
     private ?Wrapper $wrapper;
+    private string $ssl_file;
+    private string $ssl_passphrase;
 
     public string $ip = '';
     public int $port = 0;
     public $log;
 
-    public function __construct(string $ip = '0.0.0.0', int $port = 65000) {
+    public function __construct(string $ip = '0.0.0.0', int $port = 65000, Map $ssl = Map {}) {
         $this->log = new FileLog();
         $this->ip = $ip;
         $this->port = $port;
         $this->startTime = time();
+
+        $file = $ssl->get('file');
+        $pass = $ssl->get('passphrase');
+
+        if (!empty($file) && $file !== null) {//this stupid check is because HHVM is a moron
+            $this->ssl_file = $file;
+        } else {
+            $this->ssl_file = '';
+        }
+
+        if (!empty($pass) && $pass !== null) {//this stupid check is because HHVM is a moron
+            $this->ssl_passphrase = $pass;
+        } else {
+            $this->ssl_passphrase = '';
+        }
     }
 
     public function loadWrapper(string $wrapper = 'RawTcp', Map $wrapper_config = Map {}): Server {
         $this->wrapper = new $wrapper($wrapper_config, $this);
         $this->wrapper->init();
         return $this;
+    }
+
+    public function isSSL() {
+        return !empty($this->ssl_file) && !empty($this->ssl_passphrase);
     }
 
     public function isRunning() {
@@ -48,8 +69,16 @@ class Server {
             )
         ));
 
+        if ($this->isSSL()) {
+            stream_context_set_option($context, 'ssl', 'local_cert', $this->ssl_file);
+            stream_context_set_option($context, 'ssl', 'passphrase', $this->ssl_passphrase);
+            stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
+            stream_context_set_option($context, 'ssl', 'verify_peer', false);
+        }
+
         $this->sock = stream_socket_server('tcp://' . $this->ip . ':' . $this->port, $this->errorcode, $this->errormsg, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
         if ($this->sock === false) {
+            stream_socket_enable_crypto($this->sock, false);
             $this->saveSocketError();
             return $this;
         }
@@ -74,12 +103,24 @@ class Server {
                 $new_client = stream_socket_accept($this->sock);
                 if ($new_client) {
                     $client_ip = stream_socket_get_name($new_client, true);
+                    $c = new Connection($new_client, $client_ip);
+
+                    if ($this->isSSL()) {
+                        if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv3_SERVER)) {
+                            if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv23_SERVER)) {
+                                if (!@stream_socket_enable_crypto($new_client, true, STREAM_CRYPTO_METHOD_SSLv2_SERVER)) {
+                                    $this->log->error('Unable to create secure socket');
+                                    $c->close();
+                                    return;
+                                }
+                            }
+                        }
+                    }
                     $key = array_search($this->sock, $read);
                     unset($read[$key]);
 
                     //$this->log->debug(date('[Y-m-d H:i:s]') . " Client is connecting from $client_ip");
 
-                    $c = new Connection($new_client, $client_ip);
                     $this->connections[$c->id] = $c;
 
                     if ($this->wrapper !== null) {

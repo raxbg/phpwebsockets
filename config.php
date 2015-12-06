@@ -6,6 +6,10 @@ $server_config = Map {
                 'localhost' => Vector {'WebChat', 'SimpleEcho'},
                 '*.ivo.com' => Vector {'SimpleEcho'}
             }
+        },
+        'ssl' => Map {
+            'file' => '',
+            'passphrase' => ''
         }
     },
     65001 => Map {

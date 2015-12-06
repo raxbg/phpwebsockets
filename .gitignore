@@ -2,3 +2,4 @@
 **/*.swp
 **/*.dat
 .hhconfig
+*.pem
