@@ -1,12 +1,12 @@
-<?hh
+<?php
 class SimpleEcho extends Component {
-    public static string $PROTOCOL = "echo";
+    public static $PROTOCOL = "echo";
 
-    public function onLoad(string $ip, int $port, string $host) {
+    public function onLoad($ip, $port, $host) {
         $this->server->log->debug("SimpleEcho component loaded on $ip:$port for host $host");
     }
 
-    public function onMessage(WebSockConnection $con, string $data, string $dataType = 'text'): void {
+    public function onMessage($con, $data, $dataType = 'text') {
         $con->send($data, ($dataType == 'binary' ? true : false));
     }
 }

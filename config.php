@@ -1,18 +1,18 @@
-<?hh
-$server_config = Map {
-    65000 => Map {
-        'WebSocket' => Map {
-            'hosts' => Map {
-                'localhost' => Vector {'WebChat', 'SimpleEcho'},
-                '*.ivo.com' => Vector {'SimpleEcho'}
-            }
-        },
-        'ssl' => Map {
+<?php
+$server_config =  array(
+    65000 => array(
+        'WebSocket' => array(
+            'hosts' => array(
+                'localhost' => array('WebChat', 'SimpleEcho'),
+                '*.ivo.com' => array('SimpleEcho')
+            )
+        ),
+        'ssl' => array(
             'file' => '',
             'passphrase' => ''
-        }
-    },
-    65001 => Map {
-        'RawTcp' => Map {}
-    }
-};
+        )
+    ),
+    65001 => array(
+        'RawTcp' => array()
+    )
+);

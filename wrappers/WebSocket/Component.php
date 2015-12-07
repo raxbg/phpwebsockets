@@ -1,15 +1,16 @@
-<?hh
+<?php
 abstract class Component {
-    public static string $PROTOCOL = '';
+    public static $PROTOCOL = '';
+    protected $server;
 
-    public function __construct(
-        protected Server $server
-    ){}
+    public function __construct($server){
+        $this->server = $server;
+    }
 
-    public function onLoad(string $ip, int $port, string $host) {}
-    public function onConnect(WebSockConnection $con) {}
-    public function onDisconnect(WebSockConnection $con) {}
+    public function onLoad($ip, $port, $host) {}
+    public function onConnect($con) {}
+    public function onDisconnect($con) {}
     public function onStop() {}
 
-    abstract public function onMessage(WebSockConnection $con, string $data, string $dataType): void;
+    abstract public function onMessage($con, $data, $dataType);
 }

@@ -1,9 +1,12 @@
-<?hh
+<?php
 class Request {
-    public function __construct(
-        public Connection $con,
-        public string $data
-    ){}
+    public $con;
+    public $data;
+
+    public function __construct($con, $data){
+        $this->con = $con;
+        $this->data = $data;
+    }
 
     public function getConnection() {
         return $this->con;

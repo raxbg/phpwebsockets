@@ -1,4 +1,4 @@
-<?hh
+<?php
 define('DS', DIRECTORY_SEPARATOR);
 define('DIR_ROOT', dirname(__FILE__).DS);
 define('DIR_CORE', DIR_ROOT . 'core' . DS);

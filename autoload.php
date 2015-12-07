@@ -1,4 +1,4 @@
-<?hh
+<?php
 function dir_search_recursive($dir, $needle) {
     $dh = opendir($dir);
     while (false !== ($entry = readdir($dh))) {

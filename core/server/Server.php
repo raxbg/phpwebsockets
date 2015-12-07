@@ -1,33 +1,33 @@
-<?hh
-enum ServerState: int {
-    STOPPED = 0;
-    RUNNING = 1;
+<?php
+class ServerState {
+    const STOPPED = 0;
+    const RUNNING = 1;
 }
 
 class Server {
     private $sock;
-    private int $errorcode = 0;
-    private string $errormsg = '';
-    private int $backlog = 100;
-    private Map<int, Connection> $connections = Map {};
-    private int $startTime = 0;
-    private ServerState $state = ServerState::STOPPED;
-    private ?Wrapper $wrapper;
-    private string $ssl_file;
-    private string $ssl_passphrase;
+    private $errorcode = 0;
+    private $errormsg = '';
+    private $backlog = 100;
+    private $connections = array();
+    private $startTime = 0;
+    private $state = ServerState::STOPPED;
+    private $wrapper;
+    private $ssl_file;
+    private $ssl_passphrase;
 
-    public string $ip = '';
-    public int $port = 0;
+    public $ip = '';
+    public $port = 0;
     public $log;
 
-    public function __construct(string $ip = '0.0.0.0', int $port = 65000, Map $ssl = Map {}) {
+    public function __construct($ip = '0.0.0.0', $port = 65000, $ssl = array()) {
         $this->log = new FileLog();
         $this->ip = $ip;
         $this->port = $port;
         $this->startTime = time();
 
-        $file = $ssl->get('file');
-        $pass = $ssl->get('passphrase');
+        $file = !empty($ssl['file']) ? $ssl['file'] : '';
+        $pass = !empty($ssl['passphrase']) ? $ssl['passphrase'] : '';
 
         if (!empty($file) && $file !== null) {//this stupid check is because HHVM is a moron
             $this->ssl_file = $file;
@@ -42,7 +42,7 @@ class Server {
         }
     }
 
-    public function loadWrapper(string $wrapper = 'RawTcp', Map $wrapper_config = Map {}): Server {
+    public function loadWrapper($wrapper = 'RawTcp', $wrapper_config = array()) {
         $this->wrapper = new $wrapper($wrapper_config, $this);
         $this->wrapper->init();
         return $this;
@@ -60,7 +60,7 @@ class Server {
         return $this->startTime;
     }
 
-    public function start(): Server {
+    public function start() {
         $this->startTime = time();
 
         $context = stream_context_create(array(
@@ -91,10 +91,10 @@ class Server {
         return $this;
     }
 
-    public async function loop(): Awaitable<void> {
+    public function loop() {
         if ($this->state !== ServerState::RUNNING) return;
 
-        $con = new Connection(stream_socket_accept($this->sock, 0.01), $this->wrapper);
+        $con = new Connection(@stream_socket_accept($this->sock, 0.01), $this->wrapper);
         while ($con->isValid()) {
             if ($this->wrapper !== null) {
                 //$this->wrapper->onConnect($con);
@@ -110,7 +110,7 @@ class Server {
             $this->connections[$con->id] = $con;//TODO: fix this fucking issue!!!
             $this->log->debug(date('[Y-m-d H:i:s]') . " Client connected from $con->ip");
 
-            $con = new Connection(stream_socket_accept($this->sock, 0.01), $this->wrapper);
+            $con = new Connection(@stream_socket_accept($this->sock, 0.01), $this->wrapper);
         }
 
         //$awaitables = Vector {};
@@ -134,12 +134,14 @@ class Server {
         $this->log->debug(sprintf("Currently active connections: %d", $this->connections->count()));
     }
 
-    public function onDisconnect(Connection $con) {
-        $this->connections->remove($con->id);
+    public function onDisconnect($con) {
+        if (isset($this->connections[$con->id])) {
+            unset($this->connections[$con->id]);
+        }
         $this->log->debug("Client has disconnected");
     }
 
-    public function stop(): void {
+    public function stop() {
         if (!$this->isRunning()) return;
 
         $this->log->debug("Closing connections...");

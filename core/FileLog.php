@@ -1,8 +1,8 @@
-<?hh
+<?php
 class FileLog extends Log {
-    private string $logFile;
+    private $logFile;
 
-    public function __construct(?string $file = NULL) {
+    public function __construct($file = null) {
         if (!is_string($file)) {
             $this->logFile = DIR_LOG . "error.log";
         } else {
@@ -14,11 +14,11 @@ class FileLog extends Log {
         }
     }
 
-    public function debug(string $message): void {
+    public function debug($message) {
         echo trim($message)."\n";
     }
 
-    public function error(string $message): void {
+    public function error($message) {
         file_put_contents($this->logFile, trim($message)."\n", FILE_APPEND);
         if (DEBUG_MODE) $this->debug($message);
     }

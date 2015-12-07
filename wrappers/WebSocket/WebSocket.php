@@ -1,12 +1,12 @@
-<?hh
+<?php
 class WebSocket extends Wrapper {
-    private string $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-    private Map<string, Component> $components = Map {};
-    private Map<string, ?Component> $hosts = Map {};
-    private Map<int, WebSockConnection> $clients = Map {};
+    private $ws_guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    private $components = array();
+    private $hosts = array();
+    private $clients = array();
 
-    public function init(): void {
-        $hosts = $this->config->get('hosts');
+    public function init() {
+        $hosts = !empty($this->config['hosts']) ? $this->config['hosts'] : array();
 
         if ($hosts !== null) {
             foreach($hosts as $host => $components) {
@@ -17,7 +17,7 @@ class WebSocket extends Wrapper {
         }
     }
 
-    public function loadComponent(string $component, string $host): ?Component {
+    public function loadComponent($component, $host) {
         $c = new $component($this->server);
         if ($c instanceof Component && !empty($c::$PROTOCOL)) {
             if ($this->server !== null) {
@@ -31,12 +31,14 @@ class WebSocket extends Wrapper {
         return null;
     }
 
-    public function onConnect(Connection $con) {
+    public function onConnect($con) {
         $this->clients[$con->id] = new WebSockConnection($con);
     }
 
-    public function onData(Connection $con, string $data) {
-        $websock_con = $this->clients->get($con->id);
+    public function onData($con, $data) {
+        if (isset($this->clients[$con->id])){
+            $websock_con = $this->clients[$con->id];
+        }
 
         if ($websock_con !== null) {
             if (!$websock_con->isAuthorized()) {
@@ -47,18 +49,19 @@ class WebSocket extends Wrapper {
         }
     }
 
-    public function onDisconnect(Connection $con) {
-        if ($this->clients->contains($con->id)) {
-            $websock_con = $this->clients->get($con->id);
+    public function onDisconnect($con) {
+        if (isset($this->clients[$con->id])) {
+            $websock_con = $this->clients[$con->id];
 
             if ($websock_con !== null && $websock_con->isAuthorized()) {
                 $protocol = $websock_con->protocol;
-                $component = $this->components->get($protocol);
+                $component = $this->components[$protocol];
                 if ($component !== null) {
                     $component->onDisconnect($websock_con);
                 }
             }
-            $this->clients->remove($con->id);
+
+            if (isset($this->clients[$con->id])) unset($this->clients[$con->id]);
         }
     }
 
@@ -69,20 +72,22 @@ class WebSocket extends Wrapper {
     }
 
     private function componentsOnMessage($con, $msg, $dataType) {
-        $component = $this->components->get($con->protocol);
-        if ($component !== null) {
-            $component->onMessage($con, $msg, $dataType);
+        if (isset($this->components[$con->protocol])) {
+            $component = $this->components[$con->protocol];
+            if ($component !== null) {
+                $component->onMessage($con, $msg, $dataType);
+            }
         }
     }
 
-    private function resetConnectionData(WebSockConnection $con): void {
+    private function resetConnectionData($con) {
         $con->multiFrameBuffer = '';
         $con->dataBuffer = '';
         $con->frameDataLength = 0;
         $con->lastFrameOpcode = 0;
     }
 
-    private function dispatchConnectionData(WebSockConnection $con) {
+    private function dispatchConnectionData($con) {
         $con->multiFrameBuffer .= $con->dataBuffer;
         $this->componentsOnMessage($con, $con->multiFrameBuffer, $con->dataType);
         $this->resetConnectionData($con);
@@ -137,7 +142,7 @@ class WebSocket extends Wrapper {
         return false;
     }
 
-    private function authClient(WebSockConnection $con, $data) {
+    private function authClient($con, $data) {
         $headers = $this->parse_headers($data);
         if ($this->validateWsHeaders($headers)) {
             $protocol = $this->selectProtocol($headers);
@@ -159,7 +164,7 @@ class WebSocket extends Wrapper {
         }
     }
 
-    private function processData(WebSockConnection $con, $data) {
+    private function processData($con, $data) {
         if ($con->wasLastFrameFinal() && $con->isFrameComplete()) {
             if (!empty($con->dataBuffer)) {
                 //$this->log->debug("Frame is complete");
@@ -183,7 +188,7 @@ class WebSocket extends Wrapper {
         }
     }
 
-    private function processFrame(WebSockConnection $con, $data) {
+    private function processFrame($con, $data) {
         $frame = new RecvFrame($data);
         if (!$frame->isValid()) return;
 

@@ -1,26 +1,26 @@
-<?hh
+<?php
 class WebSockConnection {
-    private Connection $con;
-    private bool $is_authorized = false;
+    private $con;
+    private $is_authorized = false;
 
-    public int $frameDataLength = 0;
-    public string $multiFrameBuffer = '';
+    public $frameDataLength = 0;
+    public $multiFrameBuffer = '';
     public $frameMask = array();
-    public string $dataBuffer = '';
-    public string $dataType = '';
-    public int $lastFrameOpcode = 0;
-    public bool $is_last_frame = true;
-    public string $protocol = '';
+    public $dataBuffer = '';
+    public $dataType = '';
+    public $lastFrameOpcode = 0;
+    public $is_last_frame = true;
+    public $protocol = '';
 
-    public function __construct(Connection $con) {
+    public function __construct($con) {
         $this->con = $con;
     }
 
-    public function sendRaw(string $data) {
+    public function sendRaw($data) {
         $this->con->send($data);
     }
 
-    public function send(string $data, bool $send_as_binary): void {
+    public function send($data, $send_as_binary) {
         if (!empty($data)) {
             $message = new SendFrame($data);
             if ($send_as_binary) {
@@ -39,27 +39,27 @@ class WebSockConnection {
         }
     }
 
-    public function getConnection(): Connection {
+    public function getConnection() {
         return $this->con;
     }
 
-    public function isAuthorized(): bool {
+    public function isAuthorized() {
         return $this->is_authorized;
     }
 
-    public function setAuthorized(bool $state) {
+    public function setAuthorized($state) {
         $this->is_authorized = $state;
     }
 
-    public function recvFrameDataLength(): int {
+    public function recvFrameDataLength() {
         return strlen($this->dataBuffer);
     }
 
-    public function isFrameComplete(): bool {
+    public function isFrameComplete() {
         return $this->frameDataLength == $this->recvFrameDataLength();
     }
 
-    public function wasLastFrameFinal(): bool {
+    public function wasLastFrameFinal() {
         return $this->is_last_frame;
     }
 }

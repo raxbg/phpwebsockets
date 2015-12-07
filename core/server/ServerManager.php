@@ -1,13 +1,13 @@
-<?hh
+<?php
 class ServerManager {
-    private Map<int, Server> $servers;
+    private $servers;
 
     public function __construct() {
-        $this->servers = new Map(null);
+        $this->servers = array();
     }
 
-    public function startServer(int $port, string $wrapper, Map $wrapper_config, Map $ssl = Map) {
-        if (!$this->servers->contains($port)) {
+    public function startServer($port, $wrapper, $wrapper_config, $ssl = array()) {
+        if (!isset($this->servers[$port])) {
             $this->servers[$port] = new Server('0.0.0.0', $port, $ssl);
             $this->servers[$port]->loadWrapper($wrapper, $wrapper_config)->start();
         }
@@ -24,14 +24,11 @@ class ServerManager {
                 }
             }
 
-            $awaitables = Vector {};
             foreach ($this->servers as $server) {
                 if ($server->isRunning()) {
-                    $awaitables->add($server->loop()->getWaitHandle());
+                    $server->loop();
                 }
             }
-            AwaitAllWaitHandle::fromVector($awaitables)->getWaitHandle()->join();
-            //SleepWaitHandle::create(20000)->join();
             usleep(20000);
         }
     }
