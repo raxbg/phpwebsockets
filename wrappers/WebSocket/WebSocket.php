@@ -47,19 +47,11 @@ class WebSocket extends Wrapper {
         }
     }
 
-    private function local_disconnect(WebSockConnection $con) {
-        $closingFrame = new SendFrame();
-        $closingFrame->opcode = 0x08;
-        $con->sendRaw($closingFrame->getFrame());
-    }
-
     public function onDisconnect(Connection $con) {
         if ($this->clients->contains($con->id)) {
             $websock_con = $this->clients->get($con->id);
 
             if ($websock_con !== null && $websock_con->isAuthorized()) {
-                $this->local_disconnect($websock_con);
-
                 $protocol = $websock_con->protocol;
                 $component = $this->components->get($protocol);
                 if ($component !== null) {
@@ -159,11 +151,11 @@ class WebSocket extends Wrapper {
                 $this->components[$protocol]->onConnect($con);
             } else {
                 $this->log->debug("Unsupported protocol. Disconnecting client...");
-                $this->local_disconnect($con);
+                $con->close();
             }
         } else {
             $this->log->debug("Header validation failed.");
-            $this->disconnect($con->getConnection());
+            $con->close();
         }
     }
 
@@ -196,7 +188,7 @@ class WebSocket extends Wrapper {
         if (!$frame->isValid()) return;
 
         if ($frame->RSV1 || $frame->RSV2 || $frame->RSV3) {
-            $this->local_disconnect($con);
+            $con->close();
             return;
         }
 

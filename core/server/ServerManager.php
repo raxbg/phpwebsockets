@@ -31,7 +31,8 @@ class ServerManager {
                 }
             }
             AwaitAllWaitHandle::fromVector($awaitables)->getWaitHandle()->join();
-            SleepWaitHandle::create(20000)->join();
+            //SleepWaitHandle::create(20000)->join();
+            usleep(20000);
         }
     }
 

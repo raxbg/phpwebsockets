@@ -10,12 +10,6 @@ abstract class Wrapper {
         $this->log = $this->server->log;
     }
 
-    protected function disconnect(Connection $con) {
-        if ($this->server !== null) {
-            $this->server->disconnect($con);
-        }
-    }
-
     abstract public function init();
     abstract public function onConnect(Connection $con);
     abstract public function onDisconnect(Connection $con);

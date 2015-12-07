@@ -10,15 +10,35 @@ class Connection {
 
     public static int $ai_count = 0;
     public int $id;
-    public string $ip;
+    public string $ip = '';
 
     protected $sock;
 
-    public function __construct($sock, ?Wrapper $wrapper, string $ip) {
+    public function __construct($sock, ?Wrapper $wrapper) {
         $this->sock = $sock;
         $this->id = ++self::$ai_count;//TODO: make sure this does not overlap with other connection ids
-        $this->ip = $ip;
         $this->wrapper = $wrapper;
+
+        if ($this->isValid()) {
+            stream_set_blocking($sock, false);
+            $this->ip = stream_socket_get_name($sock, true);
+        }
+    }
+
+    public function enableSSL(): bool {
+        if (!@stream_socket_enable_crypto($this->sock, true, STREAM_CRYPTO_METHOD_SSLv3_SERVER)) {
+            if (!@stream_socket_enable_crypto($this->sock, true, STREAM_CRYPTO_METHOD_SSLv23_SERVER)) {
+                if (!@stream_socket_enable_crypto($this->sock, true, STREAM_CRYPTO_METHOD_SSLv2_SERVER)) {
+                    $this->close();
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public function isValid(): bool {
+        return $this->sock !== false;
     }
 
     public function getResource() {
@@ -39,6 +59,12 @@ class Connection {
     public async function listen(): Awaitable<void> {
         if ($this->state !== ConnectionState::OPENED) return;
 
+        if (feof($this->sock)) {
+            if ($this->wrapper !== null) {
+                //$this->wrapper->onDisconnect($this);
+            }
+        }
+
         $code = await stream_await($this->sock, STREAM_AWAIT_READ, 0.010);
 
         switch ($code) {
@@ -46,7 +72,7 @@ class Connection {
                 fclose($this->sock);
                 $this->state = ConnectionState::CLOSED;
                 if ($this->wrapper !== null) {
-                    $this->wrapper->onDisconnect($this);
+                    //$this->wrapper->onDisconnect($this);
                 }
                 return;
             case STREAM_AWAIT_READY:

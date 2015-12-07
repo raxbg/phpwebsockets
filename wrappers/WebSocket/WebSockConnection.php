@@ -31,6 +31,14 @@ class WebSockConnection {
         }
     }
 
+    public function close() {
+        if ($this->isAuthorized()) {
+            $closingFrame = new SendFrame();
+            $closingFrame->opcode = 0x08;
+            $this->con->send($closingFrame->getFrame());
+        }
+    }
+
     public function getConnection(): Connection {
         return $this->con;
     }

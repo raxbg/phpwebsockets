@@ -6,7 +6,9 @@ class RawTcp extends Wrapper {
         $con->send("Hello\n");
     }
 
-    public function onDisconnect(Connection $con) {}
+    public function onDisconnect(Connection $con) {
+        $this->log->debug("Client disconnected " . $con->ip);
+    }
 
     public function onData(Connection $con, string $data) {
         $con->send($data);
