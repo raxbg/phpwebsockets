@@ -14,14 +14,14 @@ class Connection {
 
     protected $sock;
 
-    public function __construct($sock, ?Wrapper $wrapper) {
+    public function __construct(&$sock, ?Wrapper $wrapper) {
         $this->sock = $sock;
         $this->id = ++self::$ai_count;//TODO: make sure this does not overlap with other connection ids
         $this->wrapper = $wrapper;
 
         if ($this->isValid()) {
-            stream_set_blocking($sock, false);
-            $this->ip = stream_socket_get_name($sock, true);
+            stream_set_blocking($this->sock, 0);
+            $this->ip = stream_socket_get_name($this->sock, true);
         }
     }
 
@@ -38,7 +38,7 @@ class Connection {
     }
 
     public function isValid(): bool {
-        return $this->sock !== false;
+        return is_resource($this->sock);
     }
 
     public function getResource() {
@@ -52,31 +52,34 @@ class Connection {
     }
 
     public function close() {
-        fclose($this->sock);
+        if (is_resource($this->sock)) {
+            stream_socket_shutdown($this->sock, STREAM_SHUT_RDWR);
+            stream_set_blocking($this->sock, false);
+            fclose($this->sock);
+        }
+
         $this->state = ConnectionState::CLOSED;
+        if ($this->wrapper !== null) {
+            $this->wrapper->onDisconnect($this);
+        }
     }
 
     public async function listen(): Awaitable<void> {
         if ($this->state !== ConnectionState::OPENED) return;
 
         if (feof($this->sock)) {
-            if ($this->wrapper !== null) {
-                //$this->wrapper->onDisconnect($this);
-            }
+            $this->close();
+            return;
         }
 
         $code = await stream_await($this->sock, STREAM_AWAIT_READ, 0.010);
 
         switch ($code) {
             case STREAM_AWAIT_CLOSED:
-                fclose($this->sock);
-                $this->state = ConnectionState::CLOSED;
-                if ($this->wrapper !== null) {
-                    //$this->wrapper->onDisconnect($this);
-                }
+                $this->close();
                 return;
             case STREAM_AWAIT_READY:
-                $data = fread($this->sock, 1024);
+                $data = fread($this->sock, 4096);
 
                 if ($this->wrapper !== null) {
                     $this->wrapper->onData($this, $data);

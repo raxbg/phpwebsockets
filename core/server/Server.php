@@ -78,7 +78,7 @@ class Server {
 
         $this->sock = stream_socket_server('tcp://' . $this->ip . ':' . $this->port, $this->errorcode, $this->errormsg, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
         if ($this->sock === false) {
-            stream_set_blocking($this->sock, false);
+            stream_set_blocking($this->sock, 0);
             stream_socket_enable_crypto($this->sock, false);
             $this->saveSocketError();
             return $this;
@@ -94,30 +94,34 @@ class Server {
     public async function loop(): Awaitable<void> {
         if ($this->state !== ServerState::RUNNING) return;
 
-        $con = new Connection(stream_socket_accept($this->sock, 0.01), $this->wrapper);
-        while ($con->isValid()) {
-            if ($this->wrapper !== null) {
-                //$this->wrapper->onConnect($con);
-            }
+        $read = array($this->sock);
+        $write = $except = null;
+        
+        if (stream_select($read, $write, $except, 0) && !empty($read)) {
+            $con = new Connection(stream_socket_accept($this->sock, 0), $this->wrapper);
 
-            if ($this->isSSL()) {
-                if (!$con->enableSSL()) {
-                    $this->log->error('Unable to create secure socket');
-                    return;
+            if ($con->isValid()) {
+                if ($this->wrapper !== null) {
+                    $this->wrapper->onConnect($con);
                 }
+
+                if ($this->isSSL()) {
+                    if (!$con->enableSSL()) {
+                        $this->log->error('Unable to create secure socket');
+                        return;
+                    }
+                }
+
+                $this->connections[$con->id] = $con;
+                $this->log->debug(date('[Y-m-d H:i:s]') . " Client connected from $con->ip");
             }
-
-            $this->connections[$con->id] = $con;//TODO: fix this fucking issue!!!
-            $this->log->debug(date('[Y-m-d H:i:s]') . " Client connected from $con->ip");
-
-            $con = new Connection(stream_socket_accept($this->sock, 0.01), $this->wrapper);
         }
 
-        //$awaitables = Vector {};
-        //foreach ($this->connections as $con) {
-        //    $awaitables->add($con->listen()->getWaitHandle());
-        //}
-        //await AwaitAllWaitHandle::fromVector($awaitables);
+        $awaitables = Vector {};
+        foreach ($this->connections as $con) {
+            $awaitables->add($con->listen()->getWaitHandle());
+        }
+        await AwaitAllWaitHandle::fromVector($awaitables);
     }
 
     public function printUptime() {
