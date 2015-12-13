@@ -78,11 +78,12 @@ class Server {
 
         $this->sock = stream_socket_server('tcp://' . $this->ip . ':' . $this->port, $this->errorcode, $this->errormsg, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
         if ($this->sock === false) {
-            stream_set_blocking($this->sock, 0);
-            stream_socket_enable_crypto($this->sock, false);
             $this->saveSocketError();
             return $this;
         }
+
+        stream_set_blocking($this->sock, 0);
+        //stream_socket_enable_crypto($this->sock, false);
 
         $this->log->debug("Server is listening on $this->ip:$this->port");
 
