@@ -11,6 +11,7 @@ class WebSockConnection {
     public $lastFrameOpcode = 0;
     public $is_last_frame = true;
     public $protocol = '';
+    public $endpoint = '';
 
     public function __construct($con) {
         $this->con = $con;
@@ -20,7 +21,7 @@ class WebSockConnection {
         $this->con->send($data);
     }
 
-    public function send($data, $send_as_binary) {
+    public function send($data, $send_as_binary = false) {
         if (!empty($data)) {
             $message = new SendFrame($data);
             if ($send_as_binary) {
@@ -36,6 +37,7 @@ class WebSockConnection {
             $closingFrame = new SendFrame();
             $closingFrame->opcode = 0x08;
             $this->con->send($closingFrame->getFrame());
+            $this->con->close();
         }
     }
 

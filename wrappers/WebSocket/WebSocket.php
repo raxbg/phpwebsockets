@@ -111,7 +111,14 @@ class WebSocket extends Wrapper {
 
     private function parse_headers($data) {
         $lines = explode("\r\n", $data);
+        $request = array_shift($lines);
+        if (!preg_match("/^GET\s(.*?)\sHTTP\/([\d\.]+)$/", $request, $matches)) {
+            return array();
+        }
+
+        $endpoint = $matches[1];
         $headers = array();
+
         if (!empty($lines)) {
             foreach ($lines as $line) {
                 if (strpos($line, ':') !== false) {
@@ -123,7 +130,11 @@ class WebSocket extends Wrapper {
                 }
             }
         }
-        return $headers;
+
+        return array(
+            'endpoint' => $endpoint,
+            'headers' => $headers
+        );
     }
 
     private function validateWsHeaders(&$headers) {
@@ -143,7 +154,8 @@ class WebSocket extends Wrapper {
     }
 
     private function authClient($con, $data) {
-        $headers = $this->parse_headers($data);
+        $request = $this->parse_headers($data);
+        $headers = $request['headers'];
         if ($this->validateWsHeaders($headers)) {
             $protocol = $this->selectProtocol($headers);
             if ($protocol) {
@@ -153,6 +165,8 @@ class WebSocket extends Wrapper {
                 $con->sendRaw($response);
 
                 $con->setAuthorized(true);
+                $con->endpoint = $request['endpoint'];
+
                 $this->components[$protocol]->onConnect($con);
             } else {
                 $this->log->debug("Unsupported protocol. Disconnecting client...");
@@ -226,7 +240,9 @@ class WebSocket extends Wrapper {
         }
 
         if ($frame->opcode == 0x8) { //disconnect code
-            //$this->log->debug('Client sent disconnect code');
+            $this->log->debug('Client sent disconnect code');
+            $con->close();
+            $this->onDisconnect($con->getConnection());
         } else if ($frame->FIN) {
             if ($con->isFrameComplete()) {
                 $this->dispatchConnectionData($con);

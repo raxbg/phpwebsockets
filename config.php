@@ -8,7 +8,8 @@ $server_config =  array(
             )
         ),
         'ssl' => array(
-            'file' => '',
+            'cert_file' => '',
+            'privkey_file' => '',
             'passphrase' => ''
         )
     ),

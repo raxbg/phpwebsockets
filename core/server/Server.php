@@ -13,7 +13,8 @@ class Server {
     private $startTime = 0;
     private $state = ServerState::STOPPED;
     private $wrapper;
-    private $ssl_file;
+    private $ssl_cert_file;
+    private $ssl_privkey_file;
     private $ssl_passphrase;
 
     public $ip = '';
@@ -26,13 +27,20 @@ class Server {
         $this->port = $port;
         $this->startTime = time();
 
-        $file = !empty($ssl['file']) ? $ssl['file'] : '';
+        $cert_file = !empty($ssl['cert_file']) ? $ssl['cert_file'] : '';
+        $privkey_file = !empty($ssl['privkey_file']) ? $ssl['privkey_file'] : '';
         $pass = !empty($ssl['passphrase']) ? $ssl['passphrase'] : '';
 
-        if (!empty($file) && $file !== null) {//this stupid check is because HHVM is a moron
-            $this->ssl_file = $file;
+        if (!empty($cert_file) && $cert_file !== null) {//this stupid check is because HHVM is a moron
+            $this->ssl_cert_file = $cert_file;
         } else {
-            $this->ssl_file = '';
+            $this->ssl_cert_file = '';
+        }
+
+        if (!empty($privkey_file) && $privkey_file !== null) {//this stupid check is because HHVM is a moron
+            $this->ssl_privkey_file = $privkey_file;
+        } else {
+            $this->ssl_privkey_file = '';
         }
 
         if (!empty($pass) && $pass !== null) {//this stupid check is because HHVM is a moron
@@ -49,7 +57,7 @@ class Server {
     }
 
     public function isSSL() {
-        return !empty($this->ssl_file) && !empty($this->ssl_passphrase);
+        return !empty($this->ssl_cert_file) && !empty($this->ssl_privkey_file);
     }
 
     public function isRunning() {
@@ -70,8 +78,11 @@ class Server {
         ));
 
         if ($this->isSSL()) {
-            stream_context_set_option($context, 'ssl', 'local_cert', $this->ssl_file);
-            stream_context_set_option($context, 'ssl', 'passphrase', $this->ssl_passphrase);
+            stream_context_set_option($context, 'ssl', 'local_cert', $this->ssl_cert_file);
+            stream_context_set_option($context, 'ssl', 'local_pk', $this->ssl_privkey_file);
+            if ($this->ssl_passphrase) {
+                stream_context_set_option($context, 'ssl', 'passphrase', $this->ssl_passphrase);
+            }
             stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
             stream_context_set_option($context, 'ssl', 'verify_peer', false);
         }
@@ -97,7 +108,7 @@ class Server {
         $con = new Connection(@stream_socket_accept($this->sock, 0.01), $this->wrapper);
         while ($con->isValid()) {
             if ($this->wrapper !== null) {
-                //$this->wrapper->onConnect($con);
+                $this->wrapper->onConnect($con);
             }
 
             if ($this->isSSL()) {
@@ -114,9 +125,9 @@ class Server {
         }
 
         //$awaitables = Vector {};
-        //foreach ($this->connections as $con) {
-        //    $awaitables->add($con->listen()->getWaitHandle());
-        //}
+        foreach ($this->connections as $con) {
+            $con->listen();
+        }
         //await AwaitAllWaitHandle::fromVector($awaitables);
     }
 
